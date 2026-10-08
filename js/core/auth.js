@@ -50,6 +50,7 @@ export const auth = {
   logout() {
     if (this.user) audit.record({ action: 'LOGOUT', details: 'User logout' });
     session.remove(SESSION_KEY);
+    session.remove('pinOkUntil');
     local.remove(SESSION_KEY);
   },
 

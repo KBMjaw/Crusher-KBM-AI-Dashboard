@@ -15,6 +15,8 @@ import { setHTML, freqTableHTML, feederTone } from '../ui/widgets.js';
 import { FEEDER_STATES, CRUSHER_STATES } from '../config.js';
 import { esc, fmtTimeSec, relTime } from '../core/format.js';
 import { mockCrusherData, mockFeederData, mockVfdData } from '../services/mockData.js';
+import { pinGuard } from '../core/security.js';
+import { requestPin } from '../ui/pinDialog.js';
 
 let pendingHz = null;
 let busy = false;
@@ -192,6 +194,11 @@ export default {
     $('[data-apply]', root).addEventListener('click', async () => {
       if (pendingHz == null) return;
       const hz = pendingHz;
+      // Changing the Manual Empty Speed needs the settings PIN (valid a few minutes).
+      if (!pinGuard.recentlyVerified) {
+        const ok = await requestPin({ message: `Enter PIN to change Manual Empty Speed to ${hz} Hz`, context: 'Manual Empty Speed' });
+        if (!ok) { toast('Speed not changed — PIN required', 'warning'); return; }
+      }
       const r = await send({ manualHz: hz }, `Empty speed set to ${hz} Hz`);
       if (r?.ok) pendingHz = null;
       store.emit('ui');
@@ -258,12 +265,12 @@ export default {
     let note = '';
     if (!allowed) note = '<span class="subtle">Available only when the feeder is EMPTY.</span>';
     else if (!manual) note = '<span class="subtle">Select MANUAL to adjust the Empty speed.</span>';
-    else if (pendingHz != null) note = `Pending change: ${v.manualHz} → ${pendingHz} Hz. Tap Apply to send to the VFD.`;
+    else if (pendingHz != null) note = `Pending change: ${v.manualHz} → ${pendingHz} Hz. Tap Apply ${pinGuard.recentlyVerified ? '' : '(PIN required) '}to send to the VFD.`;
     else note = `<span class="t-green">Active: VFD commanded to ${v.commandHz} Hz.</span>`;
     setHTML($('[data-pending]', root), note);
     const apply = $('[data-apply]', root);
     apply.disabled = !editable || pendingHz == null;
-    apply.textContent = pendingHz != null ? `Apply ${pendingHz} Hz` : 'Apply speed';
+    setHTML(apply, `${pinGuard.recentlyVerified ? '' : icon('lock', { size: 16 })}${pendingHz != null ? `Apply ${pendingHz} Hz` : 'Apply speed'}`);
     $('[data-cancel]', root).hidden = pendingHz == null;
 
     // Trend

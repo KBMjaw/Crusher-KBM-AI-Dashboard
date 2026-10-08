@@ -44,8 +44,9 @@ output directory `.` (root). `vercel.json` sets the service-worker headers.
 - Crusher not running → feeder command 0 Hz (interlock).
 - FULL / PARTIALLY FULL → MANUAL is locked and the manual speed controls are hidden.
 - Changing the **Empty** automatic frequency or the manual min/max requires the settings PIN
-  (Profile › Feeder frequency settings › Unlock). Operator manual speed within the configured
-  range does not need the PIN. 5 wrong PINs → 60 s lockout. Only a hash is in the code.
+  (Profile › Feeder frequency settings › Unlock). Applying a new **Manual Empty Speed** on the
+  Machine screen also asks for the PIN; after a correct PIN, further speed changes don't ask again
+  for 5 minutes (`APP.pinGraceSec`). Switching AUTO/MANUAL itself needs no PIN. 5 wrong PINs → 60 s lockout. Only a hash is in the code.
 
 ## Audit log (`js/services/auditService.js`)
 

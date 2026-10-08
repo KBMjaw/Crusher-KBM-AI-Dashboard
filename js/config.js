@@ -37,6 +37,8 @@ export const APP = {
   settingsPinHash: '5ee3dcc5',
   pinMaxAttempts: 5,
   pinLockoutSec: 60,
+  /** After a correct PIN, Manual Empty Speed changes don't ask again for this long. */
+  pinGraceSec: 300,
 
   /** VAPID public key for Web Push. Set when the backend push service exists. */
   vapidPublicKey: null,

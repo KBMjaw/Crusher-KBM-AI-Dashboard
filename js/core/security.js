@@ -26,6 +26,11 @@ export const pinGuard = {
     return Math.max(0, Math.ceil((until - Date.now()) / 1000));
   },
 
+  /** True while a recent correct PIN is still valid (APP.pinGraceSec). */
+  get recentlyVerified() {
+    return session.get('pinOkUntil', 0) > Date.now();
+  },
+
   /**
    * Returns { ok } or { ok:false, error }.
    * `context` describes what was being unlocked (for the audit log).
@@ -36,6 +41,7 @@ export const pinGuard = {
     const ok = /^\d{4}$/.test(pin) && fnv1a(`kbm-pin:${pin}`) === APP.settingsPinHash;
     if (ok) {
       session.set('pinFails', 0);
+      session.set('pinOkUntil', Date.now() + APP.pinGraceSec * 1000);
       audit.record({ action: AUDIT.PIN_VERIFIED, details: `PIN verified to modify ${context}` });
       return { ok: true };
     }
