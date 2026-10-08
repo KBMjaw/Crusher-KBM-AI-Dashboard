@@ -87,7 +87,7 @@ function setAiState(next, { silent = false } = {}) {
     `AI detected feeder ${FEEDER_STATES[next].label.toLowerCase()} (confidence ${Math.round(sim.confidence)}%).`);
   if (prev === 'EMPTY' && sim.requestedMode === 'MANUAL') {
     sim.requestedMode = 'AUTO';
-    emitAlert('warning', 'MANUAL_OVERRIDE_OFF', 'Manual Override Disabled',
+    emitAlert('warning', 'MANUAL_OVERRIDE_AUTO_REVERT', 'Manual Override Disabled',
       `Feeder no longer empty (${FEEDER_STATES[next].label}). Control returned to AUTO.`);
   }
 }

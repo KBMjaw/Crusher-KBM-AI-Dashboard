@@ -101,7 +101,7 @@ export function modal({ title, body, footer = '', onMount, onClose, size = 'md',
       prevFocus?.focus?.();
     }, 180);
   };
-  const onKey = (e) => { if (e.key === 'Escape' && dismissible) close(); };
+  const onKey = (e) => { if (e.key === 'Escape' && dismissible && root.lastElementChild === wrap) close(); };
   document.addEventListener('keydown', onKey);
   if (dismissible) wrap.querySelectorAll('[data-close]').forEach((b) => b.addEventListener('click', close));
   requestAnimationFrame(() => {

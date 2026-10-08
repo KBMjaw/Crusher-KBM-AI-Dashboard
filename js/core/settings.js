@@ -11,9 +11,10 @@ export const settings = {
   get(key) { return current[key]; },
 
   update(partial) {
+    const prev = current;
     current = { ...current, ...partial };
     const ok = local.set('settings', current);
-    listeners.forEach((fn) => fn(current, partial));
+    listeners.forEach((fn) => fn(current, partial, prev));
     return ok;
   },
 

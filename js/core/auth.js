@@ -9,6 +9,7 @@
 
 import { APP } from '../config.js';
 import { local, session } from './storage.js';
+import { audit } from '../services/auditService.js';
 
 const SESSION_KEY = 'session';
 
@@ -30,9 +31,10 @@ export const auth = {
     const u = String(username || '').trim();
     if (!u || !password) throw new Error('Enter username and password');
     if (u.toLowerCase() !== APP.demoUser.username || password !== demoPassword()) {
+      audit.record({ action: 'LOGIN_FAILED', details: 'Incorrect username or password', username: u.slice(0, 40), role: '—' });
       throw new Error('Incorrect username or password');
     }
-    const user = { username: u, loginAt: Date.now() };
+    const user = { username: u.toLowerCase(), loginAt: Date.now(), sessionId: Math.random().toString(36).slice(2, 10) };
     session.set(SESSION_KEY, user);
     if (remember) {
       local.set(SESSION_KEY, user);
@@ -41,10 +43,12 @@ export const auth = {
       local.remove(SESSION_KEY);
       local.remove('rememberUser');
     }
+    audit.record({ action: 'LOGIN', details: remember ? 'Login (remember me)' : 'Login' });
     return user;
   },
 
   logout() {
+    if (this.user) audit.record({ action: 'LOGOUT', details: 'User logout' });
     session.remove(SESSION_KEY);
     local.remove(SESSION_KEY);
   },
@@ -61,6 +65,7 @@ export const auth = {
     else if (next && confirm !== next) errors.confirm = 'Passwords do not match';
     if (Object.keys(errors).length) return errors;
     local.set('demoPassword', next);
+    audit.record({ action: 'PASSWORD_CHANGED', details: 'Password changed (values are never recorded)' });
     return {};
   },
 };

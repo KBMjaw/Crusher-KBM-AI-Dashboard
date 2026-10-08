@@ -100,7 +100,7 @@ export default {
             <div class="locked-note" data-lock hidden></div>
             <div class="seg" role="group" aria-label="Control mode">
               <button type="button" data-mode="AUTO">${icon('auto', { size: 17 })}AUTO</button>
-              <button type="button" data-mode="MANUAL">${icon('hand', { size: 17 })}MANUAL</button>
+              <button type="button" data-mode="MANUAL"></button>
             </div>
             <p class="form-note" style="margin-top:10px">Manual control is only available when the feeder is <strong>EMPTY</strong>. AI detection keeps running in manual mode — manual only overrides the VFD frequency.</p>
           </section>
@@ -230,12 +230,13 @@ export default {
       b.classList.toggle('on', on);
       b.setAttribute('aria-pressed', on);
       b.disabled = busy || (b.dataset.mode === 'MANUAL' && !allowed);
+      if (b.dataset.mode === 'MANUAL') setHTML(b, `${icon(allowed ? 'hand' : 'lock', { size: 17 })}MANUAL`);
     });
     setHTML($('[data-modechip]', root), toneChip(manual ? 'amber' : 'blue', manual ? 'Manual override' : 'Auto'));
     const lock = $('[data-lock]', root);
     lock.hidden = allowed;
     if (!allowed) {
-      setHTML(lock, `${icon('lock', { size: 18 })}<div><strong>Manual control unavailable.</strong> AI detects <strong>${FEEDER_STATES[st.feeder.aiState].label.toUpperCase()}</strong> — the feeder runs in AUTO at ${v.autoHz} Hz.</div>`);
+      setHTML(lock, `${icon('lock', { size: 18 })}<div><strong>Manual control unavailable.</strong> AI detects <strong>${FEEDER_STATES[st.feeder.aiState].label.toUpperCase()}</strong> — the feeder stays in AUTO at ${v.autoHz} Hz. Manual Empty speed appears only when the feeder is EMPTY.</div>`);
     }
 
     // Manual speed card
@@ -253,7 +254,7 @@ export default {
     setHTML($('[data-minlbl]', root), `${s.manualMin} Hz min`);
     setHTML($('[data-maxlbl]', root), `${s.manualMax} Hz max`);
     setHTML($('[data-maxchip]', root), shown >= s.manualMax ? '<span class="chip chip-amber">Maximum</span>' : shown <= s.manualMin ? '<span class="chip chip-gray">Minimum</span>' : '');
-    card.style.opacity = allowed ? '' : '0.6';
+    card.hidden = !allowed; // manual speed controls exist only while AI = EMPTY
     let note = '';
     if (!allowed) note = '<span class="subtle">Available only when the feeder is EMPTY.</span>';
     else if (!manual) note = '<span class="subtle">Select MANUAL to adjust the Empty speed.</span>';

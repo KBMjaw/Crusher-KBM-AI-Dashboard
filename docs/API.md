@@ -47,3 +47,24 @@ See the object returned by `mockAnalytics()` in `js/services/mockData.js`
 
 ## Push
 `POST /api/v1/push/subscribe` — body is the browser `PushSubscription` JSON.
+
+## Audit (authoritative on the server)
+```
+User → PWA → FastAPI → Authentication → Audit Service → Database
+```
+- `POST /api/v1/audit` — body `{ "action", "details", "prev", "next" }`. The server adds
+  `username`, `role`, `sessionId`, client `ip` (from the request / proxy header) and `ts`.
+  Security-relevant actions (login, logout, control changes, setting changes) should be written by
+  the backend itself when it handles those requests, not trusted from the client.
+- `GET /api/v1/audit?from=YYYY-MM-DD&to=YYYY-MM-DD&user=&role=&action=&ip=&limit=`
+  → `[{ "id", "ts", "username", "role", "ip", "sessionId", "action", "details", "prev", "next" }]`
+
+Action keys: `LOGIN, LOGIN_FAILED, LOGOUT, MANUAL_OVERRIDE_ENABLED, MANUAL_OVERRIDE_DISABLED,
+EMPTY_SPEED_CHANGED, FREQUENCY_SETTING_CHANGED, MANUAL_RANGE_CHANGED, PIN_VERIFIED, PIN_FAILED,
+PROFILE_UPDATED, PROFILE_PHOTO_CHANGED, PASSWORD_CHANGED, COMPANY_DETAILS_UPDATED,
+COMPANY_LOGO_CHANGED, NOTIFICATION_SETTING_CHANGED, SETTINGS_CHANGED`.
+
+## Settings PIN
+`POST /api/v1/settings/verify-pin` `{ "pin": "…" }` → `{ "ok": true, "token": "…" }` (short-lived
+token required by `PUT /api/v1/settings` for Empty frequency / manual range changes). Rate-limit and
+audit failures server-side.

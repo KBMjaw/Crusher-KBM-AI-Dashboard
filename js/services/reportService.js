@@ -6,6 +6,7 @@
 
 import { settings } from '../core/settings.js';
 import { APP, FEEDER_STATES } from '../config.js';
+import { actionLabel } from './auditService.js';
 import {
   fmtDuration, fmtDate, fmtDateTime, fmtTime, toISODate,
 } from '../core/format.js';
@@ -134,6 +135,77 @@ export function buildReport(a) {
   };
 }
 
+/* ── Audit log sections ── */
+const AUDIT_HEAD = ['Date', 'Time', 'User', 'Role', 'IP Address', 'Action', 'Details', 'Previous', 'New'];
+
+function auditSections(records) {
+  const count = (keys) => records.filter((r) => keys.includes(r.action)).length;
+  const users = [...new Set(records.map((r) => r.username))];
+  return [
+    {
+      title: 'Audit Log Summary',
+      rows: [
+        ['Audit records', String(records.length)],
+        ['Users', users.join(', ') || '—'],
+        ['Logins / logouts', `${count(['LOGIN'])} / ${count(['LOGOUT'])}`],
+        ['Failed logins / incorrect PIN', `${count(['LOGIN_FAILED'])} / ${count(['PIN_FAILED'])}`],
+        ['Manual override enabled / disabled', `${count(['MANUAL_OVERRIDE_ENABLED'])} / ${count(['MANUAL_OVERRIDE_DISABLED'])}`],
+        ['Manual Empty speed changes', String(count(['EMPTY_SPEED_CHANGED']))],
+        ['Frequency / range setting changes', String(count(['FREQUENCY_SETTING_CHANGED', 'MANUAL_RANGE_CHANGED']))],
+        ['Record source', APP.dataSource === 'mock'
+          ? 'Prototype: stored on this device, IP addresses simulated — not an authoritative audit record'
+          : 'Backend audit service'],
+      ],
+    },
+    {
+      title: 'Audit Log',
+      audit: true,
+      table: {
+        head: AUDIT_HEAD,
+        body: records.map((r) => [fmtDate(r.ts), fmtTime(r.ts), r.username, r.role, r.ip, actionLabel(r.action), r.details, r.prev || '—', r.next || '—']),
+      },
+    },
+  ];
+}
+
+/**
+ * Builds the report for the selected type.
+ *  type: 'operational' | 'audit' | 'complete'
+ *  analytics: payload from DataService.getAnalytics (operational / complete)
+ *  audit: audit records already filtered to the period
+ *  period: { label, from, to } for audit-only reports
+ */
+export function composeReport({ type = 'operational', analytics, audit = [], period }) {
+  const s = settings.all;
+  if (type === 'audit') {
+    const p = period || {};
+    const span = p.from && p.to ? (p.from === p.to ? fmtDate(p.from) : `${fmtDate(p.from)} – ${fmtDate(p.to)}`) : 'All records';
+    return {
+      title: 'Audit Log Report',
+      company: s.companyName,
+      plant: s.plantName,
+      logo: s.companyLogo,
+      periodText: `${p.label || 'Audit Log'} · ${span}`,
+      fileBase: `audit-log_${p.from || 'all'}${p.to && p.to !== p.from ? `_to_${p.to}` : ''}`,
+      sections: [
+        { title: 'Report Period', rows: [['Period', `${p.label || 'Audit Log'} (${span})`], ['Generated', fmtDateTime(new Date())]] },
+        ...auditSections(audit),
+      ],
+      trend: [],
+      multiDay: false,
+      landscape: true,
+    };
+  }
+  const r = buildReport(analytics);
+  if (type === 'complete') {
+    r.title = 'Complete Report — Operations & Audit Log';
+    r.fileBase = r.fileBase.replace('crusher-report', 'crusher-complete-report');
+    r.sections.push(...auditSections(audit));
+    r.landscape = true;
+  }
+  return r;
+}
+
 function download(blob, name) {
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
@@ -162,9 +234,11 @@ export function exportCSV(r) {
     }
     lines.push([]);
   });
-  lines.push(['VFD FREQUENCY TREND']);
-  lines.push(['Time', 'Frequency (Hz)']);
-  r.trend.forEach((t) => lines.push([fmtDateTime(t.t), t.hz]));
+  if (r.trend.length) {
+    lines.push(['VFD FREQUENCY TREND']);
+    lines.push(['Time', 'Frequency (Hz)']);
+    r.trend.forEach((t) => lines.push([fmtDateTime(t.t), t.hz]));
+  }
   const csv = `﻿${lines.map((l) => l.map(csvCell).join(',')).join('\r\n')}`;
   download(new Blob([csv], { type: 'text/csv;charset=utf-8' }), `${r.fileBase}.csv`);
 }
@@ -186,12 +260,16 @@ export async function exportExcel(r) {
   r.sections.filter((s) => s.table).forEach((sec) => {
     const rows = [sec.table.head, ...(sec.table.body.length ? sec.table.body : [['None']])];
     const sh = XLSX.utils.aoa_to_sheet(rows);
-    sh['!cols'] = sec.table.head.map(() => ({ wch: 18 }));
+    sh['!cols'] = sec.audit
+      ? [12, 10, 12, 16, 15, 28, 52, 18, 18].map((wch) => ({ wch }))
+      : sec.table.head.map(() => ({ wch: 18 }));
     XLSX.utils.book_append_sheet(wb, sh, sec.title.replace(/[^A-Za-z0-9 &]/g, '').slice(0, 31));
   });
+  if (r.trend.length) {
   const trend = XLSX.utils.aoa_to_sheet([['Time', 'Frequency (Hz)'], ...r.trend.map((t) => [fmtDateTime(t.t), t.hz])]);
   trend['!cols'] = [{ wch: 24 }, { wch: 16 }];
   XLSX.utils.book_append_sheet(wb, trend, 'VFD Trend');
+  }
   XLSX.writeFile(wb, `${r.fileBase}.xlsx`);
 }
 
@@ -200,8 +278,9 @@ export async function exportPDF(r) {
   await loadScript('/vendor/jspdf.umd.min.js');
   await loadScript('/vendor/jspdf.plugin.autotable.min.js');
   const { jsPDF } = window.jspdf;
-  const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+  const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: r.landscape ? 'landscape' : 'portrait' });
   const W = doc.internal.pageSize.getWidth();
+  const H = doc.internal.pageSize.getHeight();
   const M = 14;
   const NAVY = [27, 45, 91];
 
@@ -231,7 +310,7 @@ export async function exportPDF(r) {
 
   let y = 38;
   const sectionTitle = (t) => {
-    if (y > 265) { doc.addPage(); y = 18; }
+    if (y > H - 32) { doc.addPage(); y = 18; }
     doc.setTextColor(...NAVY);
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(11);
@@ -252,6 +331,15 @@ export async function exportPDF(r) {
     sectionTitle(sec.title);
     if (sec.rows) {
       doc.autoTable({ ...tableOpts, startY: y + 1, body: sec.rows, columnStyles: { 0: { cellWidth: 75, textColor: [90, 100, 120] }, 1: { fontStyle: 'bold' } } });
+    } else if (sec.audit) {
+      doc.autoTable({
+        ...tableOpts,
+        startY: y + 1,
+        head: [sec.table.head],
+        body: sec.table.body.length ? sec.table.body : [[{ content: 'No audit records in this period', colSpan: sec.table.head.length }]],
+        styles: { ...tableOpts.styles, fontSize: 7.5, cellPadding: 1.6 },
+        columnStyles: { 0: { cellWidth: 20 }, 1: { cellWidth: 16 }, 4: { cellWidth: 22 }, 5: { fontStyle: 'bold', cellWidth: 34 }, 6: { cellWidth: 'auto' } },
+      });
     } else {
       doc.autoTable({ ...tableOpts, startY: y + 1, head: [sec.table.head], body: sec.table.body.length ? sec.table.body : [[{ content: 'None in this period', colSpan: sec.table.head.length }]] });
     }
@@ -259,7 +347,7 @@ export async function exportPDF(r) {
 
     // VFD trend chart after the VFD section
     if (sec.title === 'VFD Frequency' && r.trend.length > 1) {
-      if (y > 220) { doc.addPage(); y = 18; }
+      if (y > H - 77) { doc.addPage(); y = 18; }
       sectionTitle(`VFD Frequency Trend${r.multiDay ? ' (hourly average)' : ''}`);
       drawTrend(doc, r.trend, M, y + 3, W - 2 * M, 50);
       y += 64;
@@ -272,8 +360,8 @@ export async function exportPDF(r) {
     doc.setPage(i);
     doc.setFontSize(8);
     doc.setTextColor(140, 150, 165);
-    doc.text(`${APP.name} v${APP.version}`, M, 290);
-    doc.text(`Page ${i} of ${pages}`, W - M, 290, { align: 'right' });
+    doc.text(`${APP.name} v${APP.version}`, M, H - 7);
+    doc.text(`Page ${i} of ${pages}`, W - M, H - 7, { align: 'right' });
   }
   doc.save(`${r.fileBase}.pdf`);
 }
@@ -308,8 +396,12 @@ function drawTrend(doc, pts, x, y, w, h) {
   doc.text('Hz', x, y - 2);
 }
 
-export async function exportReport(format, analytics) {
-  const r = buildReport(analytics);
+/**
+ * format: 'pdf' | 'excel' | 'csv'
+ * opts: { type, analytics, audit, period } — see composeReport().
+ */
+export async function exportReport(format, opts) {
+  const r = composeReport(opts);
   if (format === 'csv') return exportCSV(r);
   if (format === 'excel') return exportExcel(r);
   return exportPDF(r);

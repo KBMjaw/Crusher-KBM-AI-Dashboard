@@ -8,7 +8,7 @@
 
 export const APP = {
   name: 'Crusher Monitor',
-  version: '1.0.0',
+  version: '1.1.0',
   build: '2026.10',
 
   /**
@@ -28,6 +28,15 @@ export const APP = {
 
   /** Demo credentials for the frontend prototype (no real security). */
   demoUser: { username: 'admin', password: '12345' },
+
+  /**
+   * Empty-speed settings PIN (prototype). Only a hash is kept in the code and
+   * the PIN is never shown in the UI. Not secure: the backend must verify the
+   * PIN (or a role permission) before accepting setting changes.
+   */
+  settingsPinHash: '5ee3dcc5',
+  pinMaxAttempts: 5,
+  pinLockoutSec: 60,
 
   /** VAPID public key for Web Push. Set when the backend push service exists. */
   vapidPublicKey: null,

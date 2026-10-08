@@ -9,6 +9,7 @@ import { renderShell, refreshBranding } from './ui/shell.js';
 import { startRouter, stopRouter, rerender } from './router.js';
 import { renderLogin } from './views/login.js';
 import { toast } from './ui/components.js';
+import { installSettingsAudit } from './services/auditService.js';
 
 const app = document.getElementById('app');
 const loginRoot = document.getElementById('login-root');
@@ -78,5 +79,6 @@ settings.subscribe((_, changed) => {
 
 /* ── Boot ── */
 applyTheme();
+installSettingsAudit();
 initPWA();
 if (auth.user) enterApp(); else showLogin();

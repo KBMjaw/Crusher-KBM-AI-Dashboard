@@ -1,6 +1,6 @@
 /* Crusher Monitor service worker — offline app shell + push-ready handlers. */
 
-const VERSION = 'cm-v1.0.0';
+const VERSION = 'cm-v1.1.0';
 const SHELL = [
   '/',
   '/index.html',
@@ -39,6 +39,10 @@ const SHELL = [
   '/js/views/analytics.js',
   '/js/views/profile.js',
   '/js/views/help.js',
+  '/js/views/auditLog.js',
+  '/js/services/auditService.js',
+  '/js/core/security.js',
+  '/js/ui/pinDialog.js',
   '/icons/icon-192.png',
   '/icons/icon-512.png',
   '/icons/icon-maskable-512.png',

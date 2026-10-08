@@ -8,6 +8,7 @@ import { APP } from '../config.js';
 import { store } from '../core/store.js';
 import { mockService } from './mockService.js';
 import { apiService } from './apiService.js';
+import { audit } from './auditService.js';
 
 const impl = APP.dataSource === 'api' ? apiService : mockService;
 const MAX_TREND = 120;
@@ -37,6 +38,9 @@ export const DataService = {
       },
       onAlert(alert) {
         store.patch('alerts', [alert, ...store.state.alerts].slice(0, MAX_ALERTS));
+        if (alert.type === 'MANUAL_OVERRIDE_AUTO_REVERT') {
+          audit.record({ action: 'MANUAL_OVERRIDE_DISABLED', details: `${alert.description} (by system)`, prev: 'MANUAL', next: `AUTO · ${store.state.vfd.commandHz} Hz`, username: 'system', role: 'Automation' });
+        }
         document.dispatchEvent(new CustomEvent('cm:alert', { detail: alert }));
       },
       onConnection(c) {
@@ -47,7 +51,23 @@ export const DataService = {
 
   stop() { impl.stop(); },
 
-  setControl(body) { return impl.setControl(body); },
+  /** Operator control request; successful changes are written to the audit log. */
+  async setControl(body) {
+    const before = { ...store.state.vfd };
+    const ai = store.state.feeder.aiState;
+    const res = await impl.setControl(body);
+    if (!res.ok) return res;
+    const after = store.state.vfd;
+    const ctx = `State ${ai} · Control ${after.mode}`;
+    if (before.mode !== 'MANUAL' && after.mode === 'MANUAL') {
+      audit.record({ action: 'MANUAL_OVERRIDE_ENABLED', details: `Empty feeder manual control enabled · VFD ${after.commandHz} Hz · State ${ai}`, prev: `AUTO · ${before.commandHz} Hz`, next: `MANUAL · ${after.commandHz} Hz` });
+    } else if (before.mode === 'MANUAL' && after.mode !== 'MANUAL') {
+      audit.record({ action: 'MANUAL_OVERRIDE_DISABLED', details: `Manual control disabled by operator · State ${ai}`, prev: `MANUAL · ${before.commandHz} Hz`, next: `AUTO · ${after.commandHz} Hz` });
+    } else if (after.mode === 'MANUAL' && before.manualHz !== after.manualHz) {
+      audit.record({ action: 'EMPTY_SPEED_CHANGED', details: ctx, prev: `${before.manualHz} Hz`, next: `${after.manualHz} Hz` });
+    }
+    return res;
+  },
 
   getAnalytics(range) { return impl.getAnalytics(range); },
 

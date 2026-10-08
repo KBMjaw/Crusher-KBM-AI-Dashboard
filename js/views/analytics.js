@@ -3,6 +3,8 @@
 import { settings } from '../core/settings.js';
 import { DataService } from '../services/dataService.js';
 import { exportReport } from '../services/reportService.js';
+import { audit, filterAudit } from '../services/auditService.js';
+import { renderAuditTab, filteredAudit, auditFilters } from './auditLog.js';
 import { icon } from '../ui/icons.js';
 import { $, modal, toast } from '../ui/components.js';
 import { lineChart, stackedBar, ring, barChart } from '../ui/charts.js';
@@ -68,7 +70,7 @@ async function load(root) {
   if (id !== reqId || !document.body.contains(body)) return;
   data = a;
   body.classList.remove('loading');
-  renderData(root, a);
+  if (tab === 'reports') renderReports(root, a); else renderData(root, a);
 }
 
 function metric(ic, label, value, sub = '') {
@@ -185,30 +187,72 @@ function renderData(root, a) {
     </section>` : ''}`);
 }
 
-function openDownload() {
-  if (!data) return;
-  const close = modal({
+const REPORT_TYPES = [
+  { id: 'operational', label: 'Operational Report', desc: 'Runtime, downtime, AI feeder states, VFD, manual overrides, alerts, OEE' },
+  { id: 'audit', label: 'Audit Log', desc: 'Who did what, when, from which IP — with previous and new values' },
+  { id: 'complete', label: 'Complete Report', desc: 'Operational report plus the audit log for the same period' },
+];
+const FORMATS = [
+  { id: 'pdf', label: 'PDF', desc: 'Formatted report with charts', ic: 'file' },
+  { id: 'excel', label: 'Excel', desc: '.xlsx workbook, one sheet per section', ic: 'table' },
+  { id: 'csv', label: 'CSV', desc: 'Plain data for other tools', ic: 'file' },
+];
+let reportType = 'operational';
+let reportFormat = 'pdf';
+
+function radioList(name, items, selected) {
+  return `<div class="radio-list" role="radiogroup">${items.map((it) => `
+    <label class="radio-opt"><input type="radio" name="${name}" value="${it.id}" ${it.id === selected ? 'checked' : ''}>${it.ic ? icon(it.ic, { size: 20 }) : ''}<span><strong>${it.label}</strong><small>${it.desc}</small></span></label>`).join('')}</div>`;
+}
+
+function periodSpan(p) {
+  return p.from === p.to ? fmtDate(p.from) : `${fmtDate(p.from)} – ${fmtDate(p.to)}`;
+}
+
+/** Runs the export. `auditOverride` = already-filtered records from the Audit Log tab. */
+async function runExport(type, fmtSel, auditOverride) {
+  const all = await audit.list();
+  if (type === 'audit' && auditOverride) {
+    const f = auditFilters;
+    return exportReport(fmtSel, {
+      type: 'audit',
+      audit: auditOverride,
+      period: { label: 'Audit Log (filtered)', from: f.from || '', to: f.to || f.from || '' },
+    });
+  }
+  if (!data) throw new Error('Report data is still loading');
+  const p = data.period;
+  const records = filterAudit(all, { from: p.from, to: p.to });
+  return exportReport(fmtSel, { type, analytics: data, audit: records, period: { label: p.label, from: p.from, to: p.to } });
+}
+
+function openDownload({ type = reportType, auditOverride = null } = {}) {
+  if (!data && !auditOverride) return;
+  const fromAudit = !!auditOverride;
+  const sub = fromAudit
+    ? `${auditOverride.length} audit record${auditOverride.length === 1 ? '' : 's'} (current filters)`
+    : `${esc(data.period.label)} · ${esc(periodSpan(data.period))}`;
+  modal({
     title: 'Download Report',
     size: 'sm',
     body: `
-      <p class="muted" style="margin-bottom:12px;font-size:14px">${esc(data.period.label)} · ${esc(data.period.from === data.period.to ? fmtDate(data.period.from) : `${fmtDate(data.period.from)} – ${fmtDate(data.period.to)}`)}</p>
+      <p class="muted" style="margin-bottom:12px;font-size:14px">${sub}</p>
+      ${fromAudit ? '' : `<div class="eyebrow" style="margin-bottom:8px">Report type</div>${radioList('rtype', REPORT_TYPES, type)}<div style="height:14px"></div>`}
       <div class="eyebrow" style="margin-bottom:8px">Select format</div>
-      <div class="radio-list" role="radiogroup">
-        <label class="radio-opt"><input type="radio" name="fmt" value="pdf" checked>${icon('file', { size: 20 })}<span><strong>PDF</strong><small>Formatted report with trend chart</small></span></label>
-        <label class="radio-opt"><input type="radio" name="fmt" value="excel">${icon('table', { size: 20 })}<span><strong>Excel</strong><small>.xlsx workbook, one sheet per section</small></span></label>
-        <label class="radio-opt"><input type="radio" name="fmt" value="csv">${icon('file', { size: 20 })}<span><strong>CSV</strong><small>Plain data for other tools</small></span></label>
-      </div>
-      <p class="form-note" style="margin-top:12px">Includes runtime, downtime, AI feeder states, VFD frequency, manual overrides, alerts and OEE.</p>`,
+      ${radioList('fmt', FORMATS, reportFormat)}`,
     footer: `<button class="btn btn-ghost" data-close>Cancel</button><button class="btn btn-primary" data-dl>${icon('download', { size: 18 })}Download</button>`,
     onMount(el, done) {
       el.querySelector('.modal-foot [data-close]').onclick = done;
       const btn = el.querySelector('[data-dl]');
       btn.onclick = async () => {
         const fmtSel = el.querySelector('input[name="fmt"]:checked').value;
+        const t = fromAudit ? 'audit' : el.querySelector('input[name="rtype"]:checked').value;
+        reportFormat = fmtSel;
+        if (!fromAudit) reportType = t;
         btn.disabled = true;
         btn.textContent = 'Preparing…';
         try {
-          await exportReport(fmtSel, data);
+          await runExport(t, fmtSel, auditOverride);
           toast(`${fmtSel === 'excel' ? 'Excel' : fmtSel.toUpperCase()} report downloaded`, 'success');
           done();
         } catch (e) {
@@ -219,44 +263,129 @@ function openDownload() {
       };
     },
   });
-  void close;
 }
+
+/** Reports tab body (uses the selected period). */
+async function renderReports(root, a) {
+  const p = a.period;
+  const records = filterAudit(await audit.list(), { from: p.from, to: p.to });
+  setHTML($('[data-plabel]', root), `${esc(periodSpan(p))} · ${p.days} day${p.days === 1 ? '' : 's'} · ${esc(a.source || 'Live data')}`);
+  setHTML($('[data-body]', root), `
+    <div class="two-col">
+      <section class="card">
+        <div class="card-head"><div class="card-title">${icon('file', { size: 16 })}Report Builder</div></div>
+        <div class="eyebrow" style="margin-bottom:8px">Report type</div>
+        <div data-rtype>${radioList('rtype-inline', REPORT_TYPES, reportType)}</div>
+        <div class="eyebrow" style="margin:16px 0 8px">Format</div>
+        <div data-rfmt>${radioList('fmt-inline', FORMATS, reportFormat)}</div>
+        <button class="btn btn-primary btn-block" data-build style="margin-top:16px">${icon('download', { size: 18 })}Download Report</button>
+      </section>
+      <div class="stack-y">
+        <section class="card">
+          <div class="card-head"><div class="card-title">${icon('calendar', { size: 16 })}Period Summary</div></div>
+          <div class="kv"><span>Period</span><strong>${esc(p.label)}</strong></div>
+          <div class="kv"><span>Dates</span><strong>${esc(periodSpan(p))}</strong></div>
+          <div class="kv"><span>Crusher runtime</span><strong>${fmtDuration(a.runtimeSec)}</strong></div>
+          <div class="kv"><span>Downtime</span><strong>${fmtDuration(a.downtimeSec)}</strong></div>
+          <div class="kv"><span>Throughput</span><strong>${Math.round(a.outputT)} t</strong></div>
+          <div class="kv"><span>Manual overrides</span><strong>${a.vfd.manualPeriods.length}</strong></div>
+          <div class="kv"><span>OEE</span><strong>${a.oee.overall.toFixed(1)}%</strong></div>
+          <div class="kv"><span>Audit records</span><strong>${records.length}</strong></div>
+        </section>
+        <section class="card">
+          <div class="card-title" style="margin-bottom:8px">${icon('info', { size: 16 })}Included</div>
+          <p class="form-note"><strong>Operational:</strong> report period, crusher status summary, runtime, downtime, feeder AI detection and state duration, VFD frequency and trend, manual override events, stops, alerts, OEE${p.days > 1 ? ', daily breakdown' : ''}.</p>
+          <p class="form-note" style="margin-top:6px"><strong>Audit Log:</strong> date, time, user, role, IP address, action, details, previous and new values.</p>
+        </section>
+      </div>
+    </div>`);
+  $('[data-rtype]', root).addEventListener('change', (e) => { reportType = e.target.value; });
+  $('[data-rfmt]', root).addEventListener('change', (e) => { reportFormat = e.target.value; });
+  $('[data-build]', root).addEventListener('click', async (e) => {
+    const btn = e.currentTarget;
+    btn.disabled = true;
+    try {
+      await runExport(reportType, reportFormat);
+      toast(`${reportFormat === 'excel' ? 'Excel' : reportFormat.toUpperCase()} report downloaded`, 'success');
+    } catch (err) {
+      toast(err.message || 'Report could not be created', 'error');
+    }
+    btn.disabled = false;
+  });
+}
+
+const TABS = [
+  { id: 'analytics', label: 'Analytics', ic: 'chart' },
+  { id: 'reports', label: 'Reports', ic: 'file' },
+  { id: 'audit', label: 'Audit Log', ic: 'shield' },
+];
+let tab = 'analytics';
+let offAudit = null;
 
 export default {
   id: 'analytics',
-  head: () => ({ title: 'Analytics & Reports', subtitle: 'Production, AI feeder, VFD and OEE' }),
+  head: () => ({ title: 'Analytics & Reports', subtitle: 'Production, AI feeder, VFD, OEE and audit log' }),
 
   render(root) {
-    const today = toISODate(new Date());
+    const q = /[?&]tab=(\w+)/.exec(location.hash);
+    tab = q && TABS.some((t) => t.id === q[1]) ? q[1] : 'analytics';
     root.innerHTML = `
       <div class="stack-y">
-        <section class="card">
-          <div class="period-bar">
-            <label class="sr-only" for="period">Report period</label>
-            <select id="period" class="select" data-period>${PERIODS.map((p) => `<option value="${p.id}" ${p.id === period ? 'selected' : ''}>${p.label}</option>`).join('')}</select>
-            <div class="dates" data-date hidden><input type="date" data-d1 max="${today}" value="${customDate}" aria-label="Date"></div>
-            <div class="dates" data-range hidden>
-              <input type="date" data-r1 max="${today}" value="${rangeFrom}" aria-label="From date"><span class="subtle">to</span>
-              <input type="date" data-r2 max="${today}" value="${rangeTo}" aria-label="To date">
-            </div>
-            <button class="btn btn-primary btn-sm" data-download style="margin-left:auto">${icon('download', { size: 17 })}Download Report</button>
-          </div>
-          <div class="period-label" data-plabel></div>
-          <div class="period-label" data-range-err></div>
-        </section>
-        <div class="stack-y" data-body><section class="card subtle">Loading…</section></div>
+        <div class="seg view-tabs" role="tablist" aria-label="Analytics sections">
+          ${TABS.map((t) => `<button type="button" role="tab" data-tab="${t.id}" class="${t.id === tab ? 'on' : ''}" aria-selected="${t.id === tab}">${icon(t.ic, { size: 16 })}${t.label}</button>`).join('')}
+        </div>
+        <div data-tabbody></div>
       </div>`;
+    root.querySelector('.view-tabs').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-tab]');
+      if (!b || b.dataset.tab === tab) return;
+      tab = b.dataset.tab;
+      history.replaceState(null, '', `#/analytics${tab === 'analytics' ? '' : `?tab=${tab}`}`);
+      root.querySelectorAll('[data-tab]').forEach((x) => { x.classList.toggle('on', x === b); x.setAttribute('aria-selected', x === b); });
+      this.renderTab(root);
+    });
+    this.renderTab(root);
+  },
 
+  renderTab(root) {
+    offAudit?.();
+    offAudit = null;
+    const body = $('[data-tabbody]', root);
+    if (tab === 'audit') {
+      body.className = 'stack-y';
+      offAudit = renderAuditTab(body, { onExport: () => openDownload({ type: 'audit', auditOverride: filteredAudit() }) });
+      return;
+    }
+    const today = toISODate(new Date());
+    body.className = 'stack-y';
+    body.innerHTML = `
+      <section class="card">
+        <div class="period-bar">
+          <label class="sr-only" for="period">Report period</label>
+          <select id="period" class="select" data-period>${PERIODS.map((p) => `<option value="${p.id}" ${p.id === period ? 'selected' : ''}>${p.label}</option>`).join('')}</select>
+          <div class="dates" data-date hidden><input type="date" data-d1 max="${today}" value="${customDate}" aria-label="Date"></div>
+          <div class="dates" data-range hidden>
+            <input type="date" data-r1 max="${today}" value="${rangeFrom}" aria-label="From date"><span class="subtle">to</span>
+            <input type="date" data-r2 max="${today}" value="${rangeTo}" aria-label="To date">
+          </div>
+          ${tab === 'analytics' ? `<button class="btn btn-primary btn-sm" data-download style="margin-left:auto">${icon('download', { size: 17 })}Download Report</button>` : ''}
+        </div>
+        <div class="period-label" data-plabel></div>
+        <div class="period-label" data-range-err></div>
+      </section>
+      <div class="stack-y" data-body><section class="card subtle">Loading…</section></div>`;
     const sync = () => {
-      $('[data-date]', root).hidden = period !== 'date';
-      $('[data-range]', root).hidden = period !== 'range';
+      $('[data-date]', body).hidden = period !== 'date';
+      $('[data-range]', body).hidden = period !== 'range';
     };
     sync();
-    $('[data-period]', root).addEventListener('change', (e) => { period = e.target.value; sync(); load(root); });
-    $('[data-d1]', root).addEventListener('change', (e) => { customDate = e.target.value; load(root); });
-    $('[data-r1]', root).addEventListener('change', (e) => { rangeFrom = e.target.value; load(root); });
-    $('[data-r2]', root).addEventListener('change', (e) => { rangeTo = e.target.value; load(root); });
-    $('[data-download]', root).addEventListener('click', openDownload);
-    load(root);
+    $('[data-period]', body).addEventListener('change', (e) => { period = e.target.value; sync(); load(body); });
+    $('[data-d1]', body).addEventListener('change', (e) => { customDate = e.target.value; load(body); });
+    $('[data-r1]', body).addEventListener('change', (e) => { rangeFrom = e.target.value; load(body); });
+    $('[data-r2]', body).addEventListener('change', (e) => { rangeTo = e.target.value; load(body); });
+    $('[data-download]', body)?.addEventListener('click', () => openDownload());
+    load(body);
   },
+
+  destroy() { offAudit?.(); offAudit = null; },
 };

@@ -32,7 +32,7 @@ output directory `.` (root). `vercel.json` sets the service-worker headers.
 | Machine | Separate **AI DETECTION** and **VFD COMMAND** panels, AUTO/MANUAL (manual only when EMPTY), manual Empty speed with −/+ and slider (40–50 Hz, Apply to send), auto-frequency table, live drive trend, demo simulator |
 | Live Camera | Camera 01/02/03, placeholder scene with AI overlay (RTSP via backend later), fullscreen |
 | Alerts | Severity filters, unread state, mark all read |
-| Analytics & Reports | Today / Yesterday / Custom Date / Daily (month to date) / Weekly / Custom Range; runtime, downtime, AI state duration, VFD trend & stats, manual periods, alerts, OEE; **Download Report** → choose PDF / Excel / CSV |
+| Analytics & Reports | Tabs **Analytics · Reports · Audit Log**. Today / Yesterday / Custom Date / Daily (month to date) / Weekly / Custom Range; runtime, downtime, AI state duration, VFD trend & stats, manual periods, alerts, OEE; **Download Report** → report type (Operational / Audit Log / Complete) + PDF / Excel / CSV. Audit Log: filter by date, user, role, action, IP; table on desktop, cards on mobile |
 | Profile & Settings | Edit name/photo/role, company name, plant, **company logo**, feeder frequencies, support contact, theme, notifications, install, change password, Help & Support, logout with confirmation |
 
 ## Control rules (`js/core/control.js`)
@@ -42,6 +42,22 @@ output directory `.` (root). `vercel.json` sets the service-worker headers.
 - MANUAL → only while AI = EMPTY; setpoint clamped to the manual range (default 40–50 Hz).
 - AI leaves EMPTY while in MANUAL → control falls back to AUTO (alert raised).
 - Crusher not running → feeder command 0 Hz (interlock).
+- FULL / PARTIALLY FULL → MANUAL is locked and the manual speed controls are hidden.
+- Changing the **Empty** automatic frequency or the manual min/max requires the settings PIN
+  (Profile › Feeder frequency settings › Unlock). Operator manual speed within the configured
+  range does not need the PIN. 5 wrong PINs → 60 s lockout. Only a hash is in the code.
+
+## Audit log (`js/services/auditService.js`)
+
+Records date/time, user, role, IP, action, details, previous and new value for: login, failed login,
+logout, manual override enabled/disabled (incl. automatic return to AUTO by `system`), manual Empty
+speed changes, frequency and manual-range changes, PIN verified/incorrect, profile, photo,
+password (values never stored), company details, logo, notification and theme/support settings.
+
+**Prototype:** stored in this browser and the IP address is simulated — it is not an authoritative
+audit record. With `APP.dataSource = 'api'` the PWA posts actions to the FastAPI audit service, which
+takes user, session, client IP and timestamp from the authenticated request and stores them; the PWA
+only displays `GET /api/v1/audit`.
 
 The backend must enforce the same rules; the browser never talks to the VFD.
 

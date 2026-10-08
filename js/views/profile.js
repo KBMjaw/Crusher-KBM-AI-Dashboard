@@ -12,6 +12,7 @@ import { pwa } from '../pwa/install.js';
 import { notifications } from '../pwa/notifications.js';
 import { installFlow } from '../ui/shell.js';
 import { DataService } from '../services/dataService.js';
+import { requestPin } from '../ui/pinDialog.js';
 
 let offInstall = null;
 
@@ -120,8 +121,11 @@ function editCompany() {
   });
 }
 
+const EMPTY_FIELDS = ['freqEmpty', 'manualMin', 'manualMax'];
+
 function editFrequencies() {
   const s = settings.all;
+  let unlocked = false;
   modal({
     title: 'Feeder Frequency Settings',
     body: `<form novalidate data-form>
@@ -129,30 +133,62 @@ function editFrequencies() {
       <div class="form-grid">
         ${field({ name: 'freqFull', label: 'Full', type: 'number', value: s.freqFull, suffix: 'Hz', attrs: 'inputmode="decimal" step="1"' })}
         ${field({ name: 'freqPartial', label: 'Partially full', type: 'number', value: s.freqPartial, suffix: 'Hz', attrs: 'inputmode="decimal" step="1"' })}
-        ${field({ name: 'freqEmpty', label: 'Empty', type: 'number', value: s.freqEmpty, suffix: 'Hz', attrs: 'inputmode="decimal" step="1"' })}
       </div>
-      <div class="eyebrow" style="margin:6px 0 10px">Manual range (Empty only)</div>
-      <div class="form-grid">
-        ${field({ name: 'manualMin', label: 'Minimum', type: 'number', value: s.manualMin, suffix: 'Hz', attrs: 'inputmode="decimal" step="1"' })}
-        ${field({ name: 'manualMax', label: 'Maximum', type: 'number', value: s.manualMax, suffix: 'Hz', attrs: 'inputmode="decimal" step="1"' })}
+      <div class="protected" data-protected>
+        <div class="protected-head">
+          <div><div class="eyebrow">Empty feeder speed</div><div class="form-note" data-lockmsg>PIN required to change these values.</div></div>
+          <button type="button" class="btn btn-ghost btn-sm" data-unlock>${icon('lock', { size: 16 })}Unlock</button>
+        </div>
+        ${field({ name: 'freqEmpty', label: 'Empty (automatic)', type: 'number', value: s.freqEmpty, suffix: 'Hz', attrs: 'inputmode="decimal" step="1" readonly' })}
+        <div class="form-grid">
+          ${field({ name: 'manualMin', label: 'Manual minimum', type: 'number', value: s.manualMin, suffix: 'Hz', attrs: 'inputmode="decimal" step="1" readonly' })}
+          ${field({ name: 'manualMax', label: 'Manual maximum', type: 'number', value: s.manualMax, suffix: 'Hz', attrs: 'inputmode="decimal" step="1" readonly' })}
+        </div>
       </div>
-      <p class="form-note">Allowed drive range ${APP.vfdLimits.min}–${APP.vfdLimits.max} Hz. In the final system these values are saved to the backend, which also enforces them.</p>
+      <p class="form-note">Allowed drive range ${APP.vfdLimits.min}–${APP.vfdLimits.max} Hz. Changes are recorded in the Audit Log. In the final system these values are saved to and enforced by the backend.</p>
     </form>`,
     footer: '<button class="btn btn-ghost" data-reset>Defaults</button><button class="btn btn-primary" data-save>Save</button>',
     onMount(el, close) {
       const f = $('[data-form]', el);
+      const box = $('[data-protected]', el);
+      const setLocked = (locked) => {
+        EMPTY_FIELDS.forEach((k) => { f[k].readOnly = locked; });
+        box.classList.toggle('is-locked', locked);
+        const b = $('[data-unlock]', el);
+        b.hidden = !locked;
+        $('[data-lockmsg]', el).innerHTML = locked
+          ? 'PIN required to change these values.'
+          : `<span class="t-green">${icon('check', { size: 14 })} Unlocked — you can edit the Empty speed settings.</span>`;
+      };
+      setLocked(true);
+      const unlock = async () => {
+        if (unlocked) return true;
+        unlocked = await requestPin({ context: 'Empty feeder speed settings' });
+        setLocked(!unlocked);
+        if (unlocked) f.freqEmpty.focus();
+        return unlocked;
+      };
+      $('[data-unlock]', el).onclick = unlock;
+      // Trying to edit a locked field opens the PIN prompt.
+      EMPTY_FIELDS.forEach((k) => f[k].addEventListener('focus', () => { if (!unlocked) { f[k].blur(); unlock(); } }));
       $('[data-reset]', el).onclick = () => {
-        const d = { freqFull: 30, freqPartial: 37, freqEmpty: 43, manualMin: 40, manualMax: 50 };
+        const d = { freqFull: 30, freqPartial: 37, ...(unlocked ? { freqEmpty: 43, manualMin: 40, manualMax: 50 } : {}) };
         Object.entries(d).forEach(([k, v]) => { f[k].value = v; });
         showErrors(f, {});
+        if (!unlocked) toast('Full and Partial reset. Unlock with PIN to reset Empty settings.', 'info');
       };
       $('[data-save]', el).onclick = () => {
-        const v = Object.fromEntries(['freqFull', 'freqPartial', 'freqEmpty', 'manualMin', 'manualMax'].map((k) => [k, f[k].value]));
+        const v = Object.fromEntries(['freqFull', 'freqPartial', ...EMPTY_FIELDS].map((k) => [k, f[k].value]));
         const errs = validateFrequencies(v);
         showErrors(f, errs);
         if (Object.keys(errs).length) return;
         const n = Object.fromEntries(Object.entries(v).map(([k, x]) => [k, Math.round(Number(x))]));
-        const md = Math.min(n.manualMax, Math.max(n.manualMin, settings.get('manualDefault')));
+        const emptyChanged = EMPTY_FIELDS.some((k) => n[k] !== settings.get(k));
+        if (emptyChanged && !unlocked) { toast('Enter the PIN to change Empty speed settings', 'warning'); return; }
+        if (!unlocked) EMPTY_FIELDS.forEach((k) => { delete n[k]; });
+        const lo = n.manualMin ?? settings.get('manualMin');
+        const hi = n.manualMax ?? settings.get('manualMax');
+        const md = Math.min(hi, Math.max(lo, settings.get('manualDefault')));
         settings.update({ ...n, manualDefault: md });
         toast('Frequency settings saved', 'success');
         close();
@@ -270,8 +306,8 @@ export default {
 
           <div class="section-title">Feeder Control</div>
           <div class="list">
-            ${row({ ic: 'sliders', label: 'Feeder frequency settings', desc: `Full ${s.freqFull} · Partial ${s.freqPartial} · Empty ${s.freqEmpty} Hz`, act: 'freq' })}
-            ${row({ ic: 'hand', tone: 'amber', label: 'Manual empty speed range', desc: `${s.manualMin}–${s.manualMax} Hz · only while AI detects EMPTY`, act: 'freq' })}
+            ${row({ ic: 'sliders', label: 'Feeder frequency settings', desc: `Full ${s.freqFull} · Partial ${s.freqPartial} · Empty ${s.freqEmpty} Hz (Empty: PIN)`, act: 'freq' })}
+            ${row({ ic: 'hand', tone: 'amber', label: 'Manual empty speed range', desc: `${s.manualMin}–${s.manualMax} Hz · only while AI detects EMPTY · PIN protected`, act: 'freq' })}
           </div>
         </div>
 
