@@ -7,6 +7,7 @@
  */
 
 import { settings } from '../core/settings.js';
+import { initUpdates } from './update.js';
 
 let deferred = null;
 let installed = false;
@@ -59,7 +60,9 @@ export function initPWA() {
 
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
     window.addEventListener('load', () => {
-      navigator.serviceWorker.register('/sw.js').catch((err) => console.warn('SW registration failed', err));
+      navigator.serviceWorker.register('/sw.js')
+        .then((reg) => initUpdates(reg))
+        .catch((err) => console.warn('SW registration failed', err));
     });
   }
 

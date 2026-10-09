@@ -13,6 +13,7 @@ import { notifications } from '../pwa/notifications.js';
 import { installFlow } from '../ui/shell.js';
 import { DataService } from '../services/dataService.js';
 import { requestPin } from '../ui/pinDialog.js';
+import { pinGuard } from '../core/security.js';
 
 let offInstall = null;
 
@@ -125,7 +126,7 @@ const EMPTY_FIELDS = ['freqEmpty', 'manualMin', 'manualMax'];
 
 function editFrequencies() {
   const s = settings.all;
-  let unlocked = false;
+  let unlocked = pinGuard.recentlyVerified; // shared 5-minute PIN window
   modal({
     title: 'Feeder Frequency Settings',
     body: `<form novalidate data-form>
@@ -158,9 +159,9 @@ function editFrequencies() {
         b.hidden = !locked;
         $('[data-lockmsg]', el).innerHTML = locked
           ? 'PIN required to change these values.'
-          : `<span class="t-green">${icon('check', { size: 14 })} Unlocked — you can edit the Empty speed settings.</span>`;
+          : `<span class="t-green">${icon('check', { size: 14 })} Unlocked — PIN valid for ${Math.max(1, Math.round(pinGuard.remainingSec / 60))} more min.</span>`;
       };
-      setLocked(true);
+      setLocked(!unlocked);
       const unlock = async () => {
         if (unlocked) return true;
         unlocked = await requestPin({ context: 'Empty feeder speed settings' });
@@ -177,7 +178,7 @@ function editFrequencies() {
         showErrors(f, {});
         if (!unlocked) toast('Full and Partial reset. Unlock with PIN to reset Empty settings.', 'info');
       };
-      $('[data-save]', el).onclick = () => {
+      $('[data-save]', el).onclick = async () => {
         const v = Object.fromEntries(['freqFull', 'freqPartial', ...EMPTY_FIELDS].map((k) => [k, f[k].value]));
         const errs = validateFrequencies(v);
         showErrors(f, errs);
@@ -185,6 +186,11 @@ function editFrequencies() {
         const n = Object.fromEntries(Object.entries(v).map(([k, x]) => [k, Math.round(Number(x))]));
         const emptyChanged = EMPTY_FIELDS.some((k) => n[k] !== settings.get(k));
         if (emptyChanged && !unlocked) { toast('Enter the PIN to change Empty speed settings', 'warning'); return; }
+        // The PIN window may have expired while the form was open — ask again.
+        if (emptyChanged && !pinGuard.recentlyVerified) {
+          const again = await requestPin({ message: 'PIN expired — enter PIN again to save Empty feeder speed settings', context: 'Empty feeder speed settings' });
+          if (!again) return;
+        }
         if (!unlocked) EMPTY_FIELDS.forEach((k) => { delete n[k]; });
         const lo = n.manualMin ?? settings.get('manualMin');
         const hi = n.manualMax ?? settings.get('manualMax');

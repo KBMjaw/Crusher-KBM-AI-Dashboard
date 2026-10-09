@@ -26,6 +26,11 @@ export const pinGuard = {
     return Math.max(0, Math.ceil((until - Date.now()) / 1000));
   },
 
+  /** Seconds left in the shared 5-minute PIN window (0 when expired). */
+  get remainingSec() {
+    return Math.max(0, Math.ceil((session.get('pinOkUntil', 0) - Date.now()) / 1000));
+  },
+
   /** True while a recent correct PIN is still valid (APP.pinGraceSec). */
   get recentlyVerified() {
     return session.get('pinOkUntil', 0) > Date.now();

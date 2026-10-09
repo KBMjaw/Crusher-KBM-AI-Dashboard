@@ -8,7 +8,7 @@
 
 export const APP = {
   name: 'Crusher Monitor',
-  version: '1.1.1',
+  version: '1.2.0',
   build: '2026.10',
 
   /**
@@ -37,7 +37,10 @@ export const APP = {
   settingsPinHash: '5ee3dcc5',
   pinMaxAttempts: 5,
   pinLockoutSec: 60,
-  /** After a correct PIN, Manual Empty Speed changes don't ask again for this long. */
+  /**
+   * Shared PIN window: after a correct PIN, Manual Empty Speed (Machine) and
+   * Empty settings (Feeder Frequency Settings) don't ask again for this long.
+   */
   pinGraceSec: 300,
 
   /** VAPID public key for Web Push. Set when the backend push service exists. */

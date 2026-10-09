@@ -30,6 +30,7 @@ let started = false;
 async function enterApp() {
   loginRoot.innerHTML = '';
   loginRoot.hidden = true;
+  document.querySelector('[data-skip]').hidden = false;
   app.hidden = false;
   renderShell(app);
   if (!started) {
@@ -52,10 +53,17 @@ export function logout() {
 
 function showLogin() {
   loginRoot.hidden = false;
+  document.querySelector('[data-skip]').hidden = true;
   renderLogin(loginRoot, { onSuccess: enterApp });
 }
 
 document.addEventListener('cm:logout', logout);
+
+// "Skip to content" without changing the hash route.
+document.querySelector('[data-skip]')?.addEventListener('click', (e) => {
+  e.preventDefault();
+  document.getElementById('view')?.focus();
+});
 
 /* ── Live alert side effects ── */
 document.addEventListener('cm:alert', (e) => {

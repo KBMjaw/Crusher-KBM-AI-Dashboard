@@ -67,6 +67,17 @@ export function toast(message, tone = 'info', ms = 3200) {
 let openModals = 0;
 
 /**
+ * Keyboard focus stays inside the top-most dialog: everything behind it
+ * (app, login, lower dialogs) is made inert while a dialog is open.
+ */
+function setBackgroundInert() {
+  const wraps = [...document.querySelectorAll('#modal-root .modal-wrap')];
+  const top = wraps[wraps.length - 1];
+  wraps.forEach((w) => { w.inert = w !== top; });
+  ['app', 'login-root'].forEach((id) => { const el = document.getElementById(id); if (el) el.inert = !!top; });
+}
+
+/**
  * Opens a modal. `body` is HTML; `onMount(el, close)` wires behaviour.
  * Returns a close function.
  */
@@ -87,6 +98,7 @@ export function modal({ title, body, footer = '', onMount, onClose, size = 'md',
   root.appendChild(wrap);
   openModals++;
   document.body.classList.add('modal-open');
+  setBackgroundInert();
   const prevFocus = document.activeElement;
 
   const close = () => {
@@ -98,6 +110,7 @@ export function modal({ title, body, footer = '', onMount, onClose, size = 'md',
       wrap.remove();
       openModals = Math.max(0, openModals - 1);
       if (!openModals) document.body.classList.remove('modal-open');
+      setBackgroundInert();
       prevFocus?.focus?.();
     }, 180);
   };

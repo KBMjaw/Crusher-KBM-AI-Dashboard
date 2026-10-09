@@ -18,17 +18,41 @@ python3 -m http.server 8080      # or: npx serve .
 
 Service worker and install need `http://localhost` or HTTPS.
 
+## Prototype security (read before production use)
+
+Everything below is checked **in the browser** and can be bypassed by anyone with access to the
+device or its developer tools. It exists to finalise the UI and workflow, not to protect equipment:
+
+- Login (`admin` / `12345`) and password change — stored per device.
+- Settings PIN — only a hash is in the code and it is never shown, but it is verified client-side.
+- Audit log — device-local, IPs simulated, editable via browser storage.
+
+When FastAPI is connected, login, PIN verification, setting changes and auditing must be enforced
+by the backend (see `docs/API.md`).
+
+## App updates
+
+A new deployment installs in the background. The app then shows **"New version available —
+Reload"**; it never reloads on its own. If there is unsaved work (an open dialog or a manual speed
+not yet applied) the user is asked to confirm before reloading. Pages still running v1.0/v1.1 are
+moved to the new service worker without a reload; their next normal reload shows the new version.
+
 ## Tests
 
 ```bash
 python3 -m http.server 8080 &
-node tests/e2e.cjs http://localhost:8080   # 91 end-to-end checks (Playwright)
+node tests/e2e.cjs                 # end-to-end feature checks (Playwright)
+node tests/update.cjs              # new-version banner + upgrade clean-up
+node tests/upgrade-from-live.cjs   # upgrade from the live v1.1.1 build (git commit 9e66e12)
+node tests/layout.cjs              # clipped/overflowing text at 320–1920 px
+node tests/a11y.cjs path/to/axe.min.js   # axe-core WCAG 2 A/AA, light + dark
 ```
 
 ## Deploy
 
-Static site. On Vercel: import the repo, framework preset **Other**, no build command,
-output directory `.` (root). `vercel.json` sets the service-worker headers.
+Static site, no build step. `vercel.json` sets the service-worker headers; `.vercelignore` keeps
+`tests/` out of deployments. See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for the current setup,
+the move to the GitHub → Vercel workflow, and rollback.
 
 ## Screens
 
@@ -52,8 +76,9 @@ output directory `.` (root). `vercel.json` sets the service-worker headers.
 - FULL / PARTIALLY FULL → MANUAL is locked and the manual speed controls are hidden.
 - Changing the **Empty** automatic frequency or the manual min/max requires the settings PIN
   (Profile › Feeder frequency settings › Unlock). Applying a new **Manual Empty Speed** on the
-  Machine screen also asks for the PIN; after a correct PIN, further speed changes don't ask again
-  for 5 minutes (`APP.pinGraceSec`). Switching AUTO/MANUAL itself needs no PIN. 5 wrong PINs → 60 s lockout. Only a hash is in the code.
+  Machine screen also asks for the PIN. One correct PIN opens a **shared 5-minute window**
+  (`APP.pinGraceSec`) for both screens; the window is checked again when saving, and logout
+  clears it. Switching AUTO/MANUAL itself needs no PIN. 5 wrong PINs → 60 s lockout. Only a hash is in the code.
 
 ## Audit log (`js/services/auditService.js`)
 
@@ -62,8 +87,10 @@ logout, manual override enabled/disabled (incl. automatic return to AUTO by `sys
 speed changes, frequency and manual-range changes, PIN verified/incorrect, profile, photo,
 password (values never stored), company details, logo, notification and theme/support settings.
 
-**Prototype:** stored in this browser and the IP address is simulated — it is not an authoritative
-audit record. With `APP.dataSource = 'api'` the PWA posts actions to the FastAPI audit service, which
+**Prototype:** a fresh installation starts with an **empty** log — only actions performed in the app
+create records (older builds' example entries are removed on upgrade). Every record is stored in this
+browser, marked **Unverified**, and IP addresses are marked **Simulated** in the UI and in exports.
+It is not a secure or authoritative audit record. With `APP.dataSource = 'api'` the PWA posts actions to the FastAPI audit service, which
 takes user, session, client IP and timestamp from the authenticated request and stores them; the PWA
 only displays `GET /api/v1/audit`.
 

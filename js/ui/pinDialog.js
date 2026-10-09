@@ -4,6 +4,7 @@ import { modal, $ } from './components.js';
 import { icon } from './icons.js';
 import { pinGuard } from '../core/security.js';
 import { esc } from '../core/format.js';
+import { APP } from '../config.js';
 
 export function requestPin({ title = 'PIN Required', message = 'Enter PIN to modify Empty feeder speed settings', context } = {}) {
   return new Promise((resolve) => {
@@ -20,6 +21,7 @@ export function requestPin({ title = 'PIN Required', message = 'Enter PIN to mod
               autocomplete="off" autocorrect="off" spellcheck="false" placeholder="••••" aria-label="4-digit PIN">
             <span class="field-error" data-err="pin" role="alert"></span>
           </label>
+          <p class="form-note">A correct PIN stays valid for ${Math.round(APP.pinGraceSec / 60)} minutes for Empty speed changes on the Machine screen and in Feeder Frequency Settings. Prototype: the PIN is checked on this device only.</p>
         </form>`,
       footer: '<button class="btn btn-ghost" data-cancel>Cancel</button><button class="btn btn-primary" data-verify>Verify</button>',
       onMount(el, close) {

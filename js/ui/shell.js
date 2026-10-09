@@ -35,7 +35,7 @@ export function renderShell(root) {
     </aside>
     <div class="main">
       <header class="topbar" data-topbar></header>
-      <div class="page-head" data-pagehead></div>
+      <header class="page-head" data-pagehead></header>
       <main class="view" id="view" tabindex="-1"></main>
     </div>
     <nav class="bottom-nav" aria-label="Main navigation">

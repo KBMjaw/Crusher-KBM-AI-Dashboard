@@ -40,6 +40,10 @@ export function renderRoute() {
     unsub = store.subscribe((st, path) => current.update(st, path));
   }
   window.scrollTo(0, 0);
+  // Move keyboard / screen-reader focus to the new page content.
+  if (document.activeElement && document.activeElement !== document.body && !document.getElementById('modal-root').contains(document.activeElement)) {
+    el.focus({ preventScroll: true });
+  }
   document.title = `${current.head().title || 'Dashboard'} — Crusher Monitor`;
 }
 

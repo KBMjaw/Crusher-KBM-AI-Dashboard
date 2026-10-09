@@ -1,6 +1,6 @@
 /* Crusher Monitor service worker — offline app shell + push-ready handlers. */
 
-const VERSION = 'cm-v1.1.1';
+const VERSION = 'cm-v1.2.0';
 const SHELL = [
   '/',
   '/index.html',
@@ -22,6 +22,7 @@ const SHELL = [
   '/js/services/reportService.js',
   '/js/pwa/install.js',
   '/js/pwa/notifications.js',
+  '/js/pwa/update.js',
   '/js/ui/icons.js',
   '/js/ui/components.js',
   '/js/ui/charts.js',
@@ -52,8 +53,22 @@ const SHELL = [
 // Large report libraries are cached on first use.
 const LAZY = ['/vendor/jspdf.umd.min.js', '/vendor/jspdf.plugin.autotable.min.js', '/vendor/xlsx.mini.min.js'];
 
+// A new version installs in the background and then WAITS. The page shows a
+// "New version available — Reload" banner; only when the user taps Reload
+// does the page send SKIP_WAITING. The first install activates immediately.
 self.addEventListener('install', (event) => {
-  event.waitUntil(caches.open(VERSION).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
+  event.waitUntil(
+    caches.open(VERSION)
+      .then((c) => c.addAll(SHELL.map((u) => new Request(u, { cache: 'reload' }))))
+      // Pages from v1.0/v1.1 have no update banner, so for that one-time
+      // transition activate like before (still no forced reload).
+      .then(() => caches.keys())
+      .then((keys) => { if (keys.some((k) => /^cm-v1\.[01]\./.test(k))) self.skipWaiting(); }),
+  );
+});
+
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {

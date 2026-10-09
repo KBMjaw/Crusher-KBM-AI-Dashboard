@@ -90,7 +90,7 @@ export function alertRowHTML(a, { compact = false } = {}) {
   return `<div class="alert-row" data-id="${esc(a.id)}">
     <div class="icon-tile soft-${sev.tone}">${icon(ic, { size: 18 })}</div>
     <div class="grow">
-      <div class="title">${!a.read ? '<span class="unread-dot" aria-label="Unread"></span>' : ''}${esc(a.title)}</div>
+      <div class="title">${!a.read ? '<span class="unread-dot" aria-hidden="true"></span><span class="sr-only">Unread: </span>' : ''}${esc(a.title)}</div>
       <div class="desc">${esc(a.description)}</div>
       ${compact ? '' : `<div class="subtle" style="font-size:12px;margin-top:3px">${esc(a.source || '')} · ${relTime(a.time)}</div>`}
     </div>

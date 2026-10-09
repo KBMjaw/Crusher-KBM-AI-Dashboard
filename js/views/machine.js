@@ -17,10 +17,12 @@ import { esc, fmtTimeSec, relTime } from '../core/format.js';
 import { mockCrusherData, mockFeederData, mockVfdData } from '../services/mockData.js';
 import { pinGuard } from '../core/security.js';
 import { requestPin } from '../ui/pinDialog.js';
+import { registerUnsavedCheck } from '../pwa/update.js';
 
 let pendingHz = null;
 let busy = false;
 let lastTrendT = 0;
+let offUnsaved = null;
 
 async function send(body, okMsg) {
   if (busy) return;
@@ -83,6 +85,7 @@ export default {
 
   render(root) {
     pendingHz = null;
+    offUnsaved = registerUnsavedCheck(() => (pendingHz != null ? `a manual speed of ${pendingHz} Hz not yet applied` : ''));
     lastTrendT = 0;
     const s = settings.all;
     const demo = DataService.demo;
@@ -289,5 +292,5 @@ export default {
     root.querySelectorAll('[data-demo-crusher] button').forEach((b) => b.classList.toggle('on', b.dataset.v === st.crusher.status));
   },
 
-  destroy() { pendingHz = null; },
+  destroy() { pendingHz = null; offUnsaved?.(); },
 };

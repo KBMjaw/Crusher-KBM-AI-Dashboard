@@ -9,18 +9,36 @@ import { store } from '../core/store.js';
 import { mockService } from './mockService.js';
 import { apiService } from './apiService.js';
 import { audit } from './auditService.js';
+import { local } from '../core/storage.js';
 
 const impl = APP.dataSource === 'api' ? apiService : mockService;
 const MAX_TREND = 120;
 const MAX_ALERTS = 200;
+
+/**
+ * Alerts survive reloads (frontend storage). In demo mode the stored list is
+ * the source; with the backend, the server list is used and only the local
+ * read/unread state is carried over.
+ */
+async function loadAlerts() {
+  const saved = local.get('alerts');
+  if (impl.name === 'mock' && Array.isArray(saved)) return saved;
+  const fresh = await impl.getAlerts();
+  if (!Array.isArray(saved)) return fresh;
+  const readIds = new Set(saved.filter((a) => a.read).map((a) => a.id));
+  return fresh.map((a) => (readIds.has(a.id) ? { ...a, read: true } : a));
+}
+
+store.subscribe((st, path) => {
+  if (path === 'alerts') local.set('alerts', st.alerts.slice(0, MAX_ALERTS));
+});
 
 export const DataService = {
   get source() { return impl.name; },
   get demo() { return impl.demo; },
 
   async start() {
-    const alerts = await impl.getAlerts();
-    store.patch('alerts', alerts);
+    store.patch('alerts', await loadAlerts());
     await impl.start({
       onLive(snap, { trendSample }) {
         const st = store.state;

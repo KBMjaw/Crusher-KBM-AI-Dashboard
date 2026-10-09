@@ -69,64 +69,30 @@ export function clientContext() {
   };
 }
 
-/* ── Demo seed (past week) ─────────────────────────────────────────── */
-function seed() {
-  const out = [];
-  const now = new Date();
-  const at = (daysAgo, h, m) => {
-    const d = new Date(now);
-    d.setDate(d.getDate() - daysAgo);
-    d.setHours(h, m, Math.floor(Math.random() * 50), 0);
-    return d;
-  };
-  const add = (d, action, extra = {}, who = {}) => {
-    if (d > now) return;
-    out.push({
-      id: `seed-${out.length}`,
-      ts: d.toISOString(),
-      username: who.username || 'admin',
-      role: who.role || 'Administrator',
-      ip: who.ip || '192.168.1.105',
-      sessionId: `demo-${d.toISOString().slice(0, 10)}`,
-      action,
-      details: '',
-      prev: '',
-      next: '',
-      source: 'demo-seed',
-      ...extra,
-    });
-  };
-  const sys = { username: 'system', role: 'Automation', ip: '127.0.0.1' };
-  const phone = { ip: '192.168.1.118' };
-  for (let day = 7; day >= 1; day--) {
-    add(at(day, 8, 2 + day), 'LOGIN', { details: 'Login from plant office PC' });
-    add(at(day, 10, 15 + day), 'MANUAL_OVERRIDE_ENABLED', { details: 'Empty feeder manual control enabled · State EMPTY', prev: 'AUTO · 43 Hz', next: 'MANUAL · 47 Hz' });
-    add(at(day, 10, 21 + day), 'EMPTY_SPEED_CHANGED', { details: 'State EMPTY · Control MANUAL', prev: '47 Hz', next: `${46 + (day % 3)} Hz` });
-    add(at(day, 10, 34 + day), 'MANUAL_OVERRIDE_DISABLED', { details: 'Feeder no longer EMPTY (FULL) — returned to AUTO by system', prev: 'MANUAL', next: 'AUTO · 30 Hz' }, sys);
-    add(at(day, 18, 10 + day), 'LOGOUT', { details: 'User logout' });
-  }
-  add(at(6, 7, 55), 'LOGIN_FAILED', { details: 'Incorrect username or password' }, phone);
-  add(at(6, 7, 56), 'LOGIN', { details: 'Login from mobile' }, phone);
-  add(at(6, 7, 58), 'LOGOUT', { details: 'User logout' }, phone);
-  add(at(5, 9, 12), 'PIN_VERIFIED', { details: 'PIN verified to modify Empty feeder speed settings' });
-  add(at(5, 9, 14), 'FREQUENCY_SETTING_CHANGED', { details: 'Changed Empty Frequency', prev: '42 Hz', next: '43 Hz' });
-  add(at(4, 11, 40), 'COMPANY_DETAILS_UPDATED', { details: 'Plant / Site changed', prev: 'Chennimalai Plant', next: 'Chennimalai Crusher Plant' });
-  add(at(3, 9, 30), 'PIN_FAILED', { details: 'Incorrect PIN while modifying Empty feeder speed settings (attempt 1)' });
-  add(at(3, 9, 31), 'PIN_VERIFIED', { details: 'PIN verified to modify Empty feeder speed settings' });
-  add(at(3, 9, 33), 'MANUAL_RANGE_CHANGED', { details: 'Changed Manual Empty Range', prev: '40–48 Hz', next: '40–50 Hz' });
-  add(at(2, 15, 5), 'FREQUENCY_SETTING_CHANGED', { details: 'Changed Partially Full Frequency', prev: '36 Hz', next: '37 Hz' });
-  add(at(2, 16, 20), 'NOTIFICATION_SETTING_CHANGED', { details: 'Push notifications', prev: 'Off', next: 'On' }, phone);
-  add(at(1, 12, 2), 'PASSWORD_CHANGED', { details: 'Password changed (values are never recorded)' });
-  return out.sort((a, b) => b.ts.localeCompare(a.ts));
+/**
+ * Fresh installs start with an EMPTY log — only real actions in this app
+ * create records. Earlier prototype builds stored example entries
+ * (source 'demo-seed'); they are removed once on load.
+ */
+function load() {
+  const stored = local.get(STORE_KEY);
+  if (!Array.isArray(stored)) return [];
+  const real = stored
+    .filter((r) => r && r.source !== 'demo-seed')
+    // records from earlier builds lack the trust fields
+    .map((r) => ('ipSimulated' in r ? r : { ...r, ipSimulated: r.username !== 'system', verified: false }));
+  local.set(STORE_KEY, real);
+  return real;
 }
 
-function load() {
-  let list = local.get(STORE_KEY);
-  if (!Array.isArray(list)) {
-    list = seed();
-    local.set(STORE_KEY, list);
-  }
-  return list;
+/** How trustworthy a record is — shown in the UI and in exports. */
+export function recordTrust(r) {
+  if (r.verified) return { verified: true, label: 'Verified (server)', ip: r.ip };
+  return {
+    verified: false,
+    label: 'Unverified (device record)',
+    ip: r.ipSimulated ? `${r.ip} (simulated)` : r.ip,
+  };
 }
 
 let records = null;
@@ -144,7 +110,9 @@ export const audit = {
       ts: new Date().toISOString(),
       username: username || ctx.username,
       role: role || ctx.role,
-      ip: username === 'system' ? '127.0.0.1' : ctx.ip,
+      ip: username === 'system' ? 'system' : ctx.ip,
+      ipSimulated: username !== 'system' && APP.dataSource === 'mock',
+      verified: false, // only the backend audit service produces verified records
       sessionId: ctx.sessionId,
       action: AUDIT[action]?.key || action,
       details: String(details),

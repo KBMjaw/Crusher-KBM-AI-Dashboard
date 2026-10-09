@@ -16,6 +16,7 @@ const OUT = process.argv[3] || path.join(require('os').tmpdir(), 'cm-e2e');
 fs.mkdirSync(OUT, { recursive: true });
 
 const results = [];
+let a0;
 function check(name, ok, info = '') {
   results.push({ name, ok: !!ok });
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${info ? `  — ${info}` : ''}`);
@@ -55,10 +56,14 @@ async function download(p, clickSel) {
   await p.click('[data-pw]');
   check('Show/hide password toggles input type', (await p.getAttribute('input[name=password]', 'type')) === 'text');
   await p.click('[data-pw]');
+  check('Fresh install: audit log empty before any action', await p.evaluate(() => !(JSON.parse(localStorage.getItem('cm.audit') || '[]').length)));
   await login(p, 'admin', 'wrong');
   check('Wrong password shows error', (await text(p, '.login-error')).includes('Incorrect username or password'));
   await login(p, 'admin', '12345');
   check('Correct login opens dashboard', await p.isVisible('[data-crusher]'));
+  a0 = await p.evaluate(() => JSON.parse(localStorage.getItem('cm.audit') || '[]'));
+  check('Audit holds only real actions (failed login + login)', a0.length === 2 && a0[0].action === 'LOGIN' && a0[1].action === 'LOGIN_FAILED');
+  check('Audit records flagged unverified with simulated IP', a0.every((r) => r.verified === false && r.ipSimulated === true));
 
   /* ── Dashboard ── */
   await wait(p, 1200);
@@ -109,9 +114,15 @@ async function download(p, clickSel) {
   check('Interlock: crusher stopped → command 0 Hz', (await text(p, '[data-vfdp] .state-word')).startsWith('0'));
   await p.click('[data-demo-crusher] button[data-v=RUNNING]'); await wait(p);
 
+  /* ── Shared PIN window ── */
+  await go(p, '#/profile?edit=freq');
+  check('PIN from Machine screen also unlocks Freq settings (shared 5 min)', !(await p.$eval('input[name=freqEmpty]', (i) => i.readOnly)));
+  await p.keyboard.press('Escape'); await wait(p);
+  await p.evaluate(() => sessionStorage.setItem('cm.pinOkUntil', JSON.stringify(Date.now() - 1000)));
+
   /* ── Profile: PIN-protected frequency settings ── */
   await go(p, '#/profile?edit=freq');
-  check('Freq settings: Empty fields locked', await p.$eval('input[name=freqEmpty]', (i) => i.readOnly) && await p.$eval('input[name=manualMax]', (i) => i.readOnly));
+  check('After 5 min expiry: Empty fields locked again', await p.$eval('input[name=freqEmpty]', (i) => i.readOnly) && await p.$eval('input[name=manualMax]', (i) => i.readOnly));
   await p.fill('input[name=freqFull]', '31');
   await p.click('.modal [data-save]'); await wait(p);
   check('Full frequency saves without PIN', await p.evaluate(() => JSON.parse(localStorage.getItem('cm.settings')).freqFull === 31));
@@ -169,6 +180,10 @@ async function download(p, clickSel) {
   check('Alerts list + Info filter', all > 0 && info.length > 0 && info.every((t) => t === 'Info'));
   await p.click('[data-readall]'); await wait(p, 300);
   check('Mark all read clears badge', await p.evaluate(() => [...document.querySelectorAll('[data-alert-badge]')].every((b) => b.hidden)));
+  const beforeReload = await p.evaluate(() => JSON.parse(localStorage.getItem('cm.alerts')).map((x) => x.id + x.read).join());
+  await p.reload({ waitUntil: 'networkidle' }); await wait(p, 900); await go(p, '#/alerts');
+  const afterReload = await p.evaluate(() => JSON.parse(localStorage.getItem('cm.alerts')).map((x) => x.id + x.read).join());
+  check('Alerts + read status survive reload', afterReload.startsWith(beforeReload.slice(0, 200)) && (await p.$$('[data-list] .unread-dot')).length === 0 && (await p.$$('[data-list] .alert-row')).length >= all);
 
   /* ── Camera / Help ── */
   await go(p, '#/camera');
@@ -199,7 +214,7 @@ async function download(p, clickSel) {
       check(`Report ${type} / ${fmt}`, d.size > 500, `${d.name} ${d.size} B`);
       if (fmt === 'csv') {
         const csv = fs.readFileSync(d.file, 'utf8');
-        check(`  ${type} CSV content`, type === 'operational' ? csv.includes('OEE') && !csv.includes('AUDIT LOG') : csv.includes('AUDIT LOG') && csv.includes('IP Address'));
+        check(`  ${type} CSV content`, type === 'operational' ? csv.includes('OEE') && !csv.includes('AUDIT LOG') : csv.includes('AUDIT LOG') && csv.includes('IP Address') && csv.includes('(simulated)') && csv.includes('Unverified'));
       }
       await wait(p, 300);
     }
@@ -214,12 +229,17 @@ async function download(p, clickSel) {
   await p.click('[data-clear]'); await wait(p, 300);
   await p.selectOption('[data-f=user]', 'system'); await wait(p, 300);
   check('Audit filter: user', (await p.$$eval('.audit-card-meta', (c) => c.every((x) => x.textContent.includes('system')))));
-  await p.click('[data-clear]'); await p.fill('[data-f=ip]', '127.0.0'); await wait(p, 300);
-  check('Audit filter: IP', (await p.$$eval('.audit-card-meta', (c) => c.length > 0 && c.every((x) => x.textContent.includes('127.0.0.1')))));
+  await p.click('[data-clear]'); await p.fill('[data-f=ip]', '192.168.1'); await wait(p, 300);
+  check('Audit filter: IP', (await p.$$eval('.audit-card-meta', (c) => c.length > 0 && c.every((x) => x.textContent.includes('192.168.1')))));
+  check('Simulated IP clearly marked', (await p.$$eval('.audit-card .tag-sim', (c) => c.length)) > 0);
   await p.click('[data-clear]'); await wait(p, 200);
   const today = new Date(); const iso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
   await p.fill('[data-f=from]', iso); await wait(p, 300);
-  check('Audit filter: date', (await text(p, '[data-count]')) !== total);
+  const todayCount = await text(p, '[data-count]');
+  const y = new Date(Date.now() - 86400000); const yIso = `${y.getFullYear()}-${String(y.getMonth() + 1).padStart(2, '0')}-${String(y.getDate()).padStart(2, '0')}`;
+  await p.fill('[data-f=from]', ''); await p.fill('[data-f=to]', yIso); await wait(p, 300);
+  check('Audit filter: date (today has records, nothing before today)', todayCount === total && (await text(p, '[data-list]')).includes('No audit records match'));
+  await p.click('[data-clear]'); await wait(p, 200);
   await p.click('[data-export]'); await wait(p, 300);
   const ad = await download(p, '.modal [data-dl]');
   check('Audit Log export (filtered)', ad.size > 500, ad.name);
@@ -228,6 +248,11 @@ async function download(p, clickSel) {
   await go(p, '#/profile');
   await p.click('[data-act=logout]'); await wait(p, 300);
   check('Logout asks for confirmation', (await text(p, '.confirm-msg')) === 'Are you sure you want to logout?');
+  for (let i = 0; i < 6; i++) await p.keyboard.press('Tab');
+  check('Keyboard focus stays inside dialog', await p.evaluate(() => !!document.activeElement.closest('.modal')));
+  await p.keyboard.press('Escape'); await wait(p, 300);
+  check('Escape closes dialog and returns focus', !(await p.isVisible('.modal')) && await p.evaluate(() => document.activeElement.matches('[data-act=logout]')));
+  await p.click('[data-act=logout]'); await wait(p, 300);
   await p.click('.modal [data-act=cancel]'); await wait(p, 300);
   check('Cancel keeps user logged in', await p.isVisible('#view'));
   await p.click('[data-act=logout]'); await wait(p, 300);

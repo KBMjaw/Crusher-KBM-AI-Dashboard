@@ -6,7 +6,7 @@
 
 import { settings } from '../core/settings.js';
 import { APP, FEEDER_STATES } from '../config.js';
-import { actionLabel } from './auditService.js';
+import { actionLabel, recordTrust } from './auditService.js';
 import {
   fmtDuration, fmtDate, fmtDateTime, fmtTime, toISODate,
 } from '../core/format.js';
@@ -136,7 +136,7 @@ export function buildReport(a) {
 }
 
 /* ── Audit log sections ── */
-const AUDIT_HEAD = ['Date', 'Time', 'User', 'Role', 'IP Address', 'Action', 'Details', 'Previous', 'New'];
+const AUDIT_HEAD = ['Date', 'Time', 'User', 'Role', 'IP Address', 'Action', 'Details', 'Previous', 'New', 'Record'];
 
 function auditSections(records) {
   const count = (keys) => records.filter((r) => keys.includes(r.action)).length;
@@ -153,7 +153,7 @@ function auditSections(records) {
         ['Manual Empty speed changes', String(count(['EMPTY_SPEED_CHANGED']))],
         ['Frequency / range setting changes', String(count(['FREQUENCY_SETTING_CHANGED', 'MANUAL_RANGE_CHANGED']))],
         ['Record source', APP.dataSource === 'mock'
-          ? 'Prototype: stored on this device, IP addresses simulated — not an authoritative audit record'
+          ? 'UNVERIFIED prototype records: stored on this device, IP addresses simulated — not a secure or authoritative audit trail'
           : 'Backend audit service'],
       ],
     },
@@ -162,7 +162,7 @@ function auditSections(records) {
       audit: true,
       table: {
         head: AUDIT_HEAD,
-        body: records.map((r) => [fmtDate(r.ts), fmtTime(r.ts), r.username, r.role, r.ip, actionLabel(r.action), r.details, r.prev || '—', r.next || '—']),
+        body: records.map((r) => { const t = recordTrust(r); return [fmtDate(r.ts), fmtTime(r.ts), r.username, r.role, t.ip, actionLabel(r.action), r.details, r.prev || '—', r.next || '—', t.verified ? 'Verified' : 'Unverified']; }),
       },
     },
   ];
@@ -261,7 +261,7 @@ export async function exportExcel(r) {
     const rows = [sec.table.head, ...(sec.table.body.length ? sec.table.body : [['None']])];
     const sh = XLSX.utils.aoa_to_sheet(rows);
     sh['!cols'] = sec.audit
-      ? [12, 10, 12, 16, 15, 28, 52, 18, 18].map((wch) => ({ wch }))
+      ? [12, 10, 12, 16, 24, 28, 52, 18, 18, 12].map((wch) => ({ wch }))
       : sec.table.head.map(() => ({ wch: 18 }));
     XLSX.utils.book_append_sheet(wb, sh, sec.title.replace(/[^A-Za-z0-9 &]/g, '').slice(0, 31));
   });

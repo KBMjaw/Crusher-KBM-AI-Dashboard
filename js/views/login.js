@@ -13,7 +13,7 @@ export function renderLogin(root, { onSuccess }) {
   const s = settings.all;
   const remembered = auth.rememberedUsername;
   root.innerHTML = `
-    <div class="login">
+    <main class="login">
       <section class="login-hero">
         ${brandLockupHTML(68)}
         <h1 class="login-app">${esc(APP.name)}</h1>
@@ -48,7 +48,7 @@ export function renderLogin(root, { onSuccess }) {
         <p class="login-foot">Demo login: <span class="demo-hint">${esc(APP.demoUser.username)}</span> / <span class="demo-hint">${esc(APP.demoUser.password)}</span><br>
         Version ${APP.version} · ${APP.dataSource === 'mock' ? 'Demo data — no hardware connected' : 'Live'}</p>
       </section>
-    </div>`;
+    </main>`;
 
   const form = $('form', root);
   const err = $('.login-error', root);

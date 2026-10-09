@@ -1,6 +1,6 @@
 /** Audit Log tab (inside Analytics & Reports). */
 
-import { audit, filterAudit, AUDIT, actionLabel } from '../services/auditService.js';
+import { audit, filterAudit, AUDIT, actionLabel, recordTrust } from '../services/auditService.js';
 import { icon } from '../ui/icons.js';
 import { $ } from '../ui/components.js';
 import { setHTML } from '../ui/widgets.js';
@@ -22,6 +22,11 @@ const tone = (a) => TONE[a] || 'gray';
 function change(r) {
   if (!r.prev && !r.next) return '';
   return `<span class="audit-change"><span>${esc(r.prev || '—')}</span>${icon('arrowRight', { size: 13 })}<strong>${esc(r.next || '—')}</strong></span>`;
+}
+
+function ipCell(r) {
+  const t = recordTrust(r);
+  return `<span class="mono audit-ip">${esc(r.ip)}</span>${r.ipSimulated ? '<span class="tag-sim" title="Simulated IP address — prototype">Simulated</span>' : ''}${t.verified ? '<span class="tag-ok">Verified</span>' : ''}`;
 }
 
 function options(values, current, allLabel) {
@@ -52,7 +57,7 @@ export function renderAuditTab(el, { onExport }) {
         <span class="subtle" data-count></span>
         <button class="btn btn-ghost btn-sm" data-clear>${icon('x', { size: 15 })}Clear filters</button>
       </div>
-      ${APP.dataSource === 'mock' ? `<div class="banner soft-gray" style="margin-top:12px;font-size:12.5px">${icon('info', { size: 16 })}<div>Prototype audit log: records are kept on this device and IP addresses are <b>simulated</b>. When the FastAPI backend is connected, the server’s audit service becomes the authoritative record.</div></div>` : ''}
+      ${APP.dataSource === 'mock' ? `<div class="banner soft-gray" style="margin-top:12px;font-size:12.5px">${icon('info', { size: 16 })}<div><b>Unverified prototype records.</b> These entries are created and stored on this device only, and IP addresses marked <b>Simulated</b> are not real. They are not a secure audit trail. When the FastAPI backend is connected, its audit service will provide verified records.</div></div>` : ''}
     </section>
     <section class="card audit-list" data-list aria-live="polite"></section>`;
 
@@ -70,14 +75,16 @@ export function renderAuditTab(el, { onExport }) {
     setHTML($('[data-count]', el), `${list.length} record${list.length === 1 ? '' : 's'}${list.length !== all.length ? ` of ${all.length}` : ''}`);
     const page = list.slice(0, shown);
     if (!page.length) {
-      setHTML($('[data-list]', el), '<p class="subtle" style="text-align:center;padding:24px 0">No audit records match these filters.</p>');
+      setHTML($('[data-list]', el), all.length
+        ? '<p class="subtle" style="text-align:center;padding:24px 0">No audit records match these filters.</p>'
+        : `<div class="audit-empty">${icon('shield', { size: 28 })}<strong>No audit records yet</strong><span>Logins, manual control, speed and setting changes made in this app will appear here.</span></div>`);
       return;
     }
     const rows = page.map((r) => `<tr>
       <td><div>${fmtDate(r.ts)}</div><div class="subtle">${fmtTime(r.ts)}</div></td>
       <td><strong>${esc(r.username)}</strong></td>
       <td>${esc(r.role)}</td>
-      <td class="mono" style="font-size:12.5px">${esc(r.ip)}</td>
+      <td>${ipCell(r)}</td>
       <td><span class="chip chip-${tone(r.action)}">${esc(actionLabel(r.action))}</span></td>
       <td class="audit-details">${esc(r.details)}${change(r)}</td>
     </tr>`).join('');
@@ -85,7 +92,7 @@ export function renderAuditTab(el, { onExport }) {
       <div class="audit-card-top"><span class="chip chip-${tone(r.action)}">${esc(actionLabel(r.action))}</span><time>${fmtDate(r.ts)} · ${fmtTime(r.ts)}</time></div>
       ${r.details ? `<div class="audit-card-details">${esc(r.details)}</div>` : ''}
       ${change(r)}
-      <div class="audit-card-meta">${icon('user', { size: 13 })}${esc(r.username)} · ${esc(r.role)}<span>${icon('wifi', { size: 13 })}<span class="mono">${esc(r.ip)}</span></span></div>
+      <div class="audit-card-meta">${icon('user', { size: 13 })}${esc(r.username)} · ${esc(r.role)}<span>${icon('wifi', { size: 13 })}${ipCell(r)}</span></div>
     </article>`).join('');
     setHTML($('[data-list]', el), `
       <div class="table-scroll audit-table"><table class="data-table">
