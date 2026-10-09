@@ -2,7 +2,7 @@
 
 import { settings, validateFrequencies } from '../core/settings.js';
 import { auth } from '../core/auth.js';
-import { APP } from '../config.js';
+import { APP, DEFAULT_SETTINGS } from '../config.js';
 import { icon } from '../ui/icons.js';
 import {
   $, modal, toast, confirmDialog, field, showErrors, readImageFile, logoHTML, avatarHTML,
@@ -173,7 +173,8 @@ function editFrequencies() {
       // Trying to edit a locked field opens the PIN prompt.
       EMPTY_FIELDS.forEach((k) => f[k].addEventListener('focus', () => { if (!unlocked) { f[k].blur(); unlock(); } }));
       $('[data-reset]', el).onclick = () => {
-        const d = { freqFull: 30, freqPartial: 37, ...(unlocked ? { freqEmpty: 43, manualMin: 40, manualMax: 50 } : {}) };
+        const D = DEFAULT_SETTINGS;
+        const d = { freqFull: D.freqFull, freqPartial: D.freqPartial, ...(unlocked ? { freqEmpty: D.freqEmpty, manualMin: D.manualMin, manualMax: D.manualMax } : {}) };
         Object.entries(d).forEach(([k, v]) => { f[k].value = v; });
         showErrors(f, {});
         if (!unlocked) toast('Full and Partial reset. Unlock with PIN to reset Empty settings.', 'info');

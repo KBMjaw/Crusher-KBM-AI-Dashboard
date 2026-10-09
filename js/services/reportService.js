@@ -219,8 +219,10 @@ function download(blob, name) {
 
 /* ── CSV ── */
 function csvCell(v) {
-  const s = String(v ?? '');
-  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  let s = String(v ?? '');
+  // Neutralise spreadsheet formulas (CSV injection) in user-supplied text.
+  if (/^[=+\-@\t\r]/.test(s) && !/^-?\d/.test(s)) s = `'${s}`;
+  return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 export function exportCSV(r) {
   const lines = [[r.title], [r.company, r.plant], [r.periodText], []];

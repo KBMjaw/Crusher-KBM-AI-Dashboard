@@ -109,7 +109,17 @@ async function download(p, clickSel) {
   await p.click('[data-demo-ai] button[data-v=PARTIAL]'); await wait(p, 1500);
   check('Feeder leaves EMPTY → back to AUTO 37 Hz', (await text(p, '[data-modechip]')) === 'Auto' && (await text(p, '[data-vfdp] .state-word')).startsWith('37'));
   a = await auditTop(p, 3);
-  check('Audit: automatic return to AUTO recorded as system', a.some((r) => r.action === 'MANUAL_OVERRIDE_DISABLED' && r.username === 'system'));
+  check('Audit: automatic return to AUTO recorded as system with correct values', a.some((r) => r.action === 'MANUAL_OVERRIDE_DISABLED' && r.username === 'system' && r.prev === 'MANUAL · 50 Hz' && r.next === 'AUTO · 37 Hz'));
+  // Feeder leaves EMPTY while the PIN dialog is open → speed must not change.
+  await p.click('[data-demo-ai] button[data-v=EMPTY]'); await wait(p);
+  await p.click('[data-mode=MANUAL]'); await wait(p, 600);
+  await p.evaluate(() => sessionStorage.setItem('cm.pinOkUntil', JSON.stringify(0)));
+  await p.click('[data-step="-1"]'); await p.click('[data-apply]'); await wait(p);
+  await p.evaluate(() => { location.hash = location.hash; });
+  await p.evaluate(() => document.querySelector('[data-demo-ai] button[data-v=FULL]').click()); await wait(p, 600);
+  await p.fill('.pin-input', '0000'); await p.click('[data-verify]'); await wait(p, 900);
+  check('Feeder left EMPTY during PIN entry → speed not applied', (await p.evaluate(() => JSON.parse(localStorage.getItem('cm.audit'))[0].action)) !== 'EMPTY_SPEED_CHANGED' && (await text(p, '[data-vfdp] .state-word')).startsWith('30'));
+  await p.click('[data-demo-ai] button[data-v=PARTIAL]'); await wait(p);
   await p.click('[data-demo-crusher] button[data-v=STOPPED]'); await wait(p);
   check('Interlock: crusher stopped → command 0 Hz', (await text(p, '[data-vfdp] .state-word')).startsWith('0'));
   await p.click('[data-demo-crusher] button[data-v=RUNNING]'); await wait(p);
@@ -131,6 +141,9 @@ async function download(p, clickSel) {
   check('Unlock asks for PIN', (await text(p, '.pin-head p')).includes('Empty feeder speed'));
   await p.fill('.pin-input', '0000'); await p.click('[data-verify]'); await wait(p, 600);
   check('Correct PIN unlocks Empty fields', !(await p.$eval('input[name=freqEmpty]', (i) => i.readOnly)));
+  await p.fill('input[name=freqPartial]', ''); await p.click('.modal [data-save]'); await wait(p);
+  check('Validation: blank frequency rejected (not saved as 0 Hz)', (await text(p, '[data-err="freqPartial"]')) === 'Enter a number');
+  await p.fill('input[name=freqPartial]', '37');
   await p.fill('input[name=manualMin]', '48'); await p.fill('input[name=manualMax]', '45');
   await p.click('.modal [data-save]'); await wait(p);
   check('Validation: min ≥ max rejected', (await text(p, '[data-err="manualMax"]')).includes('greater'));
@@ -259,12 +272,32 @@ async function download(p, clickSel) {
   await p.click('.modal [data-act=ok]'); await wait(p, 600);
   check('Logout returns to login', await p.isVisible('.login-card'));
   check('Audit: logout recorded', (await auditTop(p, 1))[0].action === 'LOGOUT');
+  await login(p, '=HYPERLINK("http://x","y")', 'x');
   await login(p, 'admin', '12345');
   check('Old password rejected after change', await p.isVisible('.login-error'));
   await login(p, 'admin', 'abcde', true);
   check('New password works', await p.isVisible('#view'));
   await p.reload({ waitUntil: 'networkidle' }); await wait(p, 800);
   check('Remember me keeps session after reload', await p.isVisible('#view'));
+  await go(p, '#/analytics?tab=audit');
+  await p.selectOption('[data-f=action]', 'LOGIN_FAILED'); await wait(p, 300);
+  await p.click('[data-export]'); await wait(p, 300);
+  await p.check('.modal input[name=fmt][value=csv]');
+  const inj = await download(p, '.modal [data-dl]');
+  check('CSV export neutralises formulas (injection)', fs.readFileSync(inj.file, 'utf8').includes(`"'=HYPERLINK`));
+
+  /* ── PIN lockout is shared by all tabs ── */
+  await p.evaluate(() => sessionStorage.removeItem('cm.pinOkUntil'));
+  await go(p, '#/profile?edit=freq');
+  await p.click('[data-unlock]'); await wait(p);
+  for (let i = 0; i < 5; i++) { await p.fill('.pin-input', '9999'); await p.click('[data-verify]'); await wait(p, 450); }
+  check('5 wrong PINs → locked', (await text(p, '[data-err="pin"]')).includes('locked'));
+  const p2 = await ctx.newPage(); await p2.goto(BASE + '/#/profile?edit=freq', { waitUntil: 'networkidle' }); await wait(p2, 900);
+  await p2.click('[data-unlock]'); await wait(p2);
+  await p2.fill('.pin-input', '0000'); await p2.click('[data-verify]'); await wait(p2, 500);
+  check('Lockout also applies in a new tab', (await text(p2, '[data-err="pin"]')).includes('Too many attempts'));
+  await p2.close();
+  await p.evaluate(() => localStorage.removeItem('cm.pinLockUntil'));
 
   /* ── PWA ── */
   const man = await p.evaluate(async () => (await fetch('/manifest.webmanifest')).json());

@@ -38,8 +38,9 @@ export function validateFrequencies(v) {
   const { min, max } = APP.vfdLimits;
   const fields = ['freqFull', 'freqPartial', 'freqEmpty', 'manualMin', 'manualMax'];
   fields.forEach((f) => {
-    const n = Number(v[f]);
-    if (!Number.isFinite(n)) errors[f] = 'Enter a number';
+    const raw = String(v[f] ?? '').trim();
+    const n = Number(raw);
+    if (raw === '' || !Number.isFinite(n)) errors[f] = 'Enter a number';
     else if (n < min || n > max) errors[f] = `Must be ${min}–${max} Hz`;
   });
   if (!errors.manualMin && !errors.manualMax && Number(v.manualMin) >= Number(v.manualMax)) {

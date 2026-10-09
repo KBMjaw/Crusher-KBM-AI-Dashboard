@@ -43,7 +43,8 @@ moved to the new service worker without a reload; their next normal reload shows
 python3 -m http.server 8080 &
 node tests/e2e.cjs                 # end-to-end feature checks (Playwright)
 node tests/update.cjs              # new-version banner + upgrade clean-up
-node tests/upgrade-from-live.cjs   # upgrade from the live v1.1.1 build (git commit 9e66e12)
+node tests/upgrade-from-live.cjs   # upgrade from the live v1.1.1 build (git tag live-v1.1.1)
+node tests/release-check.cjs       # version bumped + all files precached (run before every release)
 node tests/layout.cjs              # clipped/overflowing text at 320–1920 px
 node tests/a11y.cjs path/to/axe.min.js   # axe-core WCAG 2 A/AA, light + dark
 ```

@@ -86,31 +86,26 @@ self.addEventListener('fetch', (event) => {
   if (url.origin !== self.location.origin) return; // fonts, future API etc. go to network
   if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/ws/')) return;
 
-  // Navigations: network first so new deployments show up, cached shell offline.
+  // Each version is served from its own precached snapshot, so old and new
+  // files are never mixed. New versions arrive only through a new sw.js
+  // (bump VERSION on every release) and the user-approved update banner.
   if (req.mode === 'navigate') {
     event.respondWith(
-      fetch(req)
-        .then((res) => {
-          const copy = res.clone();
-          caches.open(VERSION).then((c) => c.put('/index.html', copy));
-          return res;
-        })
-        .catch(() => caches.match('/index.html')),
+      caches.open(VERSION)
+        .then((c) => c.match('/index.html'))
+        .then((cached) => cached || fetch(req)),
     );
     return;
   }
 
-  // Static assets: stale-while-revalidate.
   event.respondWith(
     caches.open(VERSION).then(async (cache) => {
       const cached = await cache.match(req, { ignoreSearch: true });
-      const network = fetch(req)
-        .then((res) => {
-          if (res.ok && (SHELL.includes(url.pathname) || LAZY.includes(url.pathname))) cache.put(req, res.clone());
-          return res;
-        })
-        .catch(() => cached);
-      return cached || network;
+      if (cached) return cached;
+      const res = await fetch(req);
+      // Report libraries are cached on first use (same version cache).
+      if (res.ok && LAZY.includes(url.pathname)) cache.put(req, res.clone());
+      return res;
     }),
   );
 });

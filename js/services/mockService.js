@@ -5,7 +5,7 @@
  */
 
 import { settings } from '../core/settings.js';
-import { resolveVfdCommand, clamp } from '../core/control.js';
+import { resolveVfdCommand, clamp, autoFrequency } from '../core/control.js';
 import { FEEDER_STATES } from '../config.js';
 import {
   mockCrusherData, mockFeederData, mockVfdData, mockAlerts, mockAnalytics, mockRecentTrend,
@@ -35,12 +35,13 @@ const sim = {
   trendTick: 0,
 };
 
-function emitAlert(severity, type, title, description, source = 'Feeder / VFD') {
+function emitAlert(severity, type, title, description, source = 'Feeder / VFD', data = null) {
   const alert = {
     id: `live-${Date.now()}-${alertSeq++}`,
     severity, type, title, description, source,
     time: new Date().toISOString(),
     read: false,
+    ...(data ? { data } : {}),
   };
   handlers.onAlert?.(alert);
 }
@@ -88,7 +89,8 @@ function setAiState(next, { silent = false } = {}) {
   if (prev === 'EMPTY' && sim.requestedMode === 'MANUAL') {
     sim.requestedMode = 'AUTO';
     emitAlert('warning', 'MANUAL_OVERRIDE_AUTO_REVERT', 'Manual Override Disabled',
-      `Feeder no longer empty (${FEEDER_STATES[next].label}). Control returned to AUTO.`);
+      `Feeder no longer empty (${FEEDER_STATES[next].label}). Control returned to AUTO.`, 'Feeder / VFD',
+      { aiState: next, prevHz: sim.manualHz, commandHz: autoFrequency(next, settings.all) });
   }
 }
 

@@ -202,6 +202,13 @@ export default {
         const ok = await requestPin({ message: `Enter PIN to change Manual Empty Speed to ${hz} Hz`, context: 'Manual Empty Speed' });
         if (!ok) { toast('Speed not changed — PIN required', 'warning'); return; }
       }
+      // State may have changed while the PIN dialog was open.
+      const v = store.state.vfd;
+      if (pendingHz !== hz || v.mode !== 'MANUAL' || !v.manualAllowed) {
+        toast('Speed not changed — feeder is no longer EMPTY / in MANUAL', 'warning');
+        store.emit('ui');
+        return;
+      }
       const r = await send({ manualHz: hz }, `Empty speed set to ${hz} Hz`);
       if (r?.ok) pendingHz = null;
       store.emit('ui');

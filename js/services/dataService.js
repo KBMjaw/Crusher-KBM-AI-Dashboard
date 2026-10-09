@@ -10,6 +10,8 @@ import { mockService } from './mockService.js';
 import { apiService } from './apiService.js';
 import { audit } from './auditService.js';
 import { local } from '../core/storage.js';
+import { settings } from '../core/settings.js';
+import { resolveVfdCommand } from '../core/control.js';
 
 const impl = APP.dataSource === 'api' ? apiService : mockService;
 const MAX_TREND = 120;
@@ -57,7 +59,8 @@ export const DataService = {
       onAlert(alert) {
         store.patch('alerts', [alert, ...store.state.alerts].slice(0, MAX_ALERTS));
         if (alert.type === 'MANUAL_OVERRIDE_AUTO_REVERT') {
-          audit.record({ action: 'MANUAL_OVERRIDE_DISABLED', details: `${alert.description} (by system)`, prev: 'MANUAL', next: `AUTO · ${store.state.vfd.commandHz} Hz`, username: 'system', role: 'Automation' });
+          const hz = alert.data?.commandHz;
+          audit.record({ action: 'MANUAL_OVERRIDE_DISABLED', details: `${alert.description} (by system)`, prev: alert.data?.prevHz != null ? `MANUAL · ${alert.data.prevHz} Hz` : 'MANUAL', next: hz != null ? `AUTO · ${hz} Hz` : 'AUTO', username: 'system', role: 'Automation' });
         }
         document.dispatchEvent(new CustomEvent('cm:alert', { detail: alert }));
       },
@@ -75,7 +78,14 @@ export const DataService = {
     const ai = store.state.feeder.aiState;
     const res = await impl.setControl(body);
     if (!res.ok) return res;
-    const after = store.state.vfd;
+    // Work out the accepted state from the request itself, so this also works
+    // with the backend (where the store only updates on the next push).
+    const after = resolveVfdCommand({
+      aiState: ai,
+      requestedMode: body.mode ?? before.requestedMode,
+      manualHz: body.manualHz ?? before.manualHz,
+      crusherStatus: store.state.crusher.status,
+    }, settings.all);
     const ctx = `State ${ai} · Control ${after.mode}`;
     if (before.mode !== 'MANUAL' && after.mode === 'MANUAL') {
       audit.record({ action: 'MANUAL_OVERRIDE_ENABLED', details: `Empty feeder manual control enabled · VFD ${after.commandHz} Hz · State ${ai}`, prev: `AUTO · ${before.commandHz} Hz`, next: `MANUAL · ${after.commandHz} Hz` });

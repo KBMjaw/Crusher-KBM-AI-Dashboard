@@ -7,7 +7,7 @@
  */
 
 import { APP } from '../config.js';
-import { session } from './storage.js';
+import { session, local } from './storage.js';
 import { audit, AUDIT } from '../services/auditService.js';
 
 function fnv1a(str) {
@@ -20,9 +20,9 @@ function fnv1a(str) {
 }
 
 export const pinGuard = {
-  /** Seconds remaining in lockout, 0 when not locked. */
+  /** Seconds remaining in lockout, 0 when not locked (shared by all tabs). */
   get lockedFor() {
-    const until = session.get('pinLockUntil', 0);
+    const until = local.get('pinLockUntil', 0);
     return Math.max(0, Math.ceil((until - Date.now()) / 1000));
   },
 
@@ -45,17 +45,17 @@ export const pinGuard = {
     await new Promise((r) => setTimeout(r, 250));
     const ok = /^\d{4}$/.test(pin) && fnv1a(`kbm-pin:${pin}`) === APP.settingsPinHash;
     if (ok) {
-      session.set('pinFails', 0);
+      local.set('pinFails', 0);
       session.set('pinOkUntil', Date.now() + APP.pinGraceSec * 1000);
       audit.record({ action: AUDIT.PIN_VERIFIED, details: `PIN verified to modify ${context}` });
       return { ok: true };
     }
-    const fails = session.get('pinFails', 0) + 1;
-    session.set('pinFails', fails);
+    const fails = local.get('pinFails', 0) + 1;
+    local.set('pinFails', fails);
     audit.record({ action: AUDIT.PIN_FAILED, details: `Incorrect PIN while modifying ${context} (attempt ${fails})` });
     if (fails >= APP.pinMaxAttempts) {
-      session.set('pinFails', 0);
-      session.set('pinLockUntil', Date.now() + APP.pinLockoutSec * 1000);
+      local.set('pinFails', 0);
+      local.set('pinLockUntil', Date.now() + APP.pinLockoutSec * 1000);
       return { ok: false, error: `Incorrect PIN. Too many attempts — locked for ${APP.pinLockoutSec} s.` };
     }
     return { ok: false, error: 'Incorrect PIN. Please try again.' };

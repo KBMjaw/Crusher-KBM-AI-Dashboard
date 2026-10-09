@@ -30,12 +30,16 @@ export function requestPin({ title = 'PIN Required', message = 'Enter PIN to mod
         const err = $('[data-err="pin"]', el);
         const btn = $('[data-verify]', el);
         input.addEventListener('input', () => { input.value = input.value.replace(/\D/g, '').slice(0, 4); err.textContent = ''; });
+        let verifying = false;
         const submit = async (e) => {
           e?.preventDefault();
+          if (verifying) return;
           if (input.value.length !== 4) { err.textContent = 'Enter the 4-digit PIN.'; input.focus(); return; }
+          verifying = true;
           btn.disabled = true;
           const res = await pinGuard.verify(input.value, context);
           btn.disabled = false;
+          verifying = false;
           if (res.ok) { ok = true; close(); return; }
           err.textContent = res.error;
           input.value = '';
