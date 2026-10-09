@@ -8,7 +8,7 @@
 
 export const APP = {
   name: 'Crusher Monitor',
-  version: '1.1.0',
+  version: '1.1.1',
   build: '2026.10',
 
   /**

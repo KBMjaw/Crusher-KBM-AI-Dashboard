@@ -40,19 +40,19 @@ export default {
         <span class="time"><span data-date></span> · <span data-clock class="mono"></span></span>
       </div>
       <div class="dash-grid stack-y">
-        <div class="grid-2 keep d-6 t-full">
+        <div class="grid-2 keep d-6 t-full l-half">
           <a class="card status-card" data-crusher href="#/machine" style="color:inherit;text-decoration:none"></a>
           <a class="card status-card" data-feeder href="#/camera" style="color:inherit;text-decoration:none"></a>
         </div>
-        <section class="card d-6 t-full" aria-label="VFD">
+        <section class="card d-6 t-full l-half" aria-label="VFD">
           <div class="card-head"><div class="card-title">${icon('pulse', { size: 16 })}Feeder VFD</div><a class="card-link" href="#/machine">Control ${icon('chevron', { size: 16 })}</a></div>
           <div data-vfd></div>
         </section>
-        <section class="card d-7 t-full" aria-label="Today">
+        <section class="card d-7 t-full l-full" aria-label="Today">
           <div class="card-head"><div class="card-title">${icon('calendar', { size: 16 })}Today</div><a class="card-link" href="#/analytics">Reports ${icon('chevron', { size: 16 })}</a></div>
           <div data-today><div class="subtle">Loading…</div></div>
         </section>
-        <section class="card d-5" aria-label="AI feeder detection">
+        <section class="card d-5 l-full" aria-label="AI feeder detection">
           <div class="card-head"><div class="card-title">${icon('camera', { size: 16 })}AI Feeder Detection</div><a class="card-link" href="#/camera">Live ${icon('chevron', { size: 16 })}</a></div>
           <div class="grid-2 keep" style="align-items:center">
             <div class="feed-thumb" data-thumb></div>
