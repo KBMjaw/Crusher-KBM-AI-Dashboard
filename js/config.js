@@ -8,7 +8,7 @@
 
 export const APP = {
   name: 'Crusher Monitor',
-  version: '1.2.0',
+  version: '1.2.1',
   build: '2026.10',
 
   /**
@@ -37,6 +37,7 @@ export const APP = {
   settingsPinHash: '5ee3dcc5',
   pinMaxAttempts: 5,
   pinLockoutSec: 60,
+  pinFailWindowSec: 600, // wrong PINs older than this no longer count towards lockout
   /**
    * Shared PIN window: after a correct PIN, Manual Empty Speed (Machine) and
    * Empty settings (Feeder Frequency Settings) don't ask again for this long.

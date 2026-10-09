@@ -122,7 +122,13 @@ async function download(p, clickSel) {
   await p.click('[data-demo-ai] button[data-v=PARTIAL]'); await wait(p);
   await p.click('[data-demo-crusher] button[data-v=STOPPED]'); await wait(p);
   check('Interlock: crusher stopped → command 0 Hz', (await text(p, '[data-vfdp] .state-word')).startsWith('0'));
+  // Interlock: auto-return audit records the real command (0 Hz while crusher stopped)
+  await p.click('[data-demo-ai] button[data-v=EMPTY]'); await wait(p);
+  await p.click('[data-mode=MANUAL]'); await wait(p, 600);
+  await p.click('[data-demo-ai] button[data-v=FULL]'); await wait(p, 600);
+  check('Audit: auto-return during interlock records AUTO · 0 Hz', (await auditTop(p, 3)).some((r) => r.username === 'system' && r.next === 'AUTO · 0 Hz'));
   await p.click('[data-demo-crusher] button[data-v=RUNNING]'); await wait(p);
+  await p.click('[data-demo-ai] button[data-v=PARTIAL]'); await wait(p);
 
   /* ── Shared PIN window ── */
   await go(p, '#/profile?edit=freq');
@@ -273,6 +279,7 @@ async function download(p, clickSel) {
   check('Logout returns to login', await p.isVisible('.login-card'));
   check('Audit: logout recorded', (await auditTop(p, 1))[0].action === 'LOGOUT');
   await login(p, '=HYPERLINK("http://x","y")', 'x');
+  await login(p, "-2+3+cmd|'/C calc'!A0", 'x');
   await login(p, 'admin', '12345');
   check('Old password rejected after change', await p.isVisible('.login-error'));
   await login(p, 'admin', 'abcde', true);
@@ -284,7 +291,25 @@ async function download(p, clickSel) {
   await p.click('[data-export]'); await wait(p, 300);
   await p.check('.modal input[name=fmt][value=csv]');
   const inj = await download(p, '.modal [data-dl]');
-  check('CSV export neutralises formulas (injection)', fs.readFileSync(inj.file, 'utf8').includes(`"'=HYPERLINK`));
+  const injCsv = fs.readFileSync(inj.file, 'utf8');
+  check('CSV export neutralises formulas (injection)', injCsv.includes(`"'=HYPERLINK`) && injCsv.includes(`,'-2+3+cmd`) && !/,(=|-2\+3)/.test(injCsv));
+
+  /* ── Old PIN failures expire ── */
+  await p.evaluate(() => localStorage.setItem('cm.pinFails', JSON.stringify({ n: 4, at: Date.now() - 11 * 60000 })));
+  await p.evaluate(() => sessionStorage.removeItem('cm.pinOkUntil'));
+  await go(p, '#/profile?edit=freq');
+  await p.click('[data-unlock]'); await wait(p);
+  await p.fill('.pin-input', '9999'); await p.click('[data-verify]'); await wait(p, 500);
+  check('Wrong PINs older than 10 min do not count towards lockout', (await text(p, '[data-err="pin"]')) === 'Incorrect PIN. Please try again.');
+  await p.keyboard.press('Escape'); await wait(p, 300); await p.keyboard.press('Escape'); await wait(p, 300);
+  await p.evaluate(() => localStorage.removeItem('cm.pinFails'));
+
+  /* ── Keyboard: focus moves to new page content ── */
+  await go(p, '#/dashboard'); await wait(p, 600);
+  await p.focus('[data-alerts] ~ * , .card-link[href="#/alerts"]').catch(() => {});
+  await p.evaluate(() => document.querySelector('.card-link[href="#/alerts"]').focus());
+  await p.keyboard.press('Enter'); await wait(p, 700);
+  check('Keyboard navigation from a link in the page focuses the new page', await p.evaluate(() => document.activeElement.id === 'view' && location.hash === '#/alerts'));
 
   /* ── PIN lockout is shared by all tabs ── */
   await p.evaluate(() => sessionStorage.removeItem('cm.pinOkUntil'));

@@ -75,9 +75,10 @@ export const DataService = {
   /** Operator control request; successful changes are written to the audit log. */
   async setControl(body) {
     const before = { ...store.state.vfd };
-    const ai = store.state.feeder.aiState;
+    const aiBefore = store.state.feeder.aiState;
     const res = await impl.setControl(body);
     if (!res.ok) return res;
+    const ai = store.state.feeder.aiState; // state after the request was accepted
     // Work out the accepted state from the request itself, so this also works
     // with the backend (where the store only updates on the next push).
     const after = resolveVfdCommand({
@@ -88,7 +89,7 @@ export const DataService = {
     }, settings.all);
     const ctx = `State ${ai} · Control ${after.mode}`;
     if (before.mode !== 'MANUAL' && after.mode === 'MANUAL') {
-      audit.record({ action: 'MANUAL_OVERRIDE_ENABLED', details: `Empty feeder manual control enabled · VFD ${after.commandHz} Hz · State ${ai}`, prev: `AUTO · ${before.commandHz} Hz`, next: `MANUAL · ${after.commandHz} Hz` });
+      audit.record({ action: 'MANUAL_OVERRIDE_ENABLED', details: `Empty feeder manual control enabled · VFD ${after.commandHz} Hz · State ${aiBefore}`, prev: `AUTO · ${before.commandHz} Hz`, next: `MANUAL · ${after.commandHz} Hz` });
     } else if (before.mode === 'MANUAL' && after.mode !== 'MANUAL') {
       audit.record({ action: 'MANUAL_OVERRIDE_DISABLED', details: `Manual control disabled by operator · State ${ai}`, prev: `MANUAL · ${before.commandHz} Hz`, next: `AUTO · ${after.commandHz} Hz` });
     } else if (after.mode === 'MANUAL' && before.manualHz !== after.manualHz) {

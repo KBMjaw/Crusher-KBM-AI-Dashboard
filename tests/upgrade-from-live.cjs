@@ -34,7 +34,8 @@ const server = spawn('python3', ['-m', 'http.server', String(PORT)], { cwd: TMP,
   await p.evaluate(async () => (await navigator.serviceWorker.getRegistration()).update());
   await p.waitForTimeout(4000);
   const after = await p.evaluate(async () => caches.keys());
-  check('New service worker activated for old page', after.includes('cm-v1.2.0') && !after.some((k) => k.startsWith('cm-v1.1')), after.join());
+  const NEW = /const VERSION = '([^']+)'/.exec(fs.readFileSync(path.join(ROOT, 'sw.js'), 'utf8'))[1];
+  check('New service worker activated for old page', after.includes(NEW) && !after.some((k) => k.startsWith('cm-v1.1')), after.join());
   check('Old page was not force-reloaded', await p.evaluate(() => window.__still === true));
   await p.reload({ waitUntil: 'networkidle' }); await p.waitForTimeout(800);
   check('Next normal reload shows new version', await p.evaluate(() => !!document.querySelector('[data-skip]')));

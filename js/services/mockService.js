@@ -5,7 +5,7 @@
  */
 
 import { settings } from '../core/settings.js';
-import { resolveVfdCommand, clamp, autoFrequency } from '../core/control.js';
+import { resolveVfdCommand, clamp } from '../core/control.js';
 import { FEEDER_STATES } from '../config.js';
 import {
   mockCrusherData, mockFeederData, mockVfdData, mockAlerts, mockAnalytics, mockRecentTrend,
@@ -90,7 +90,7 @@ function setAiState(next, { silent = false } = {}) {
     sim.requestedMode = 'AUTO';
     emitAlert('warning', 'MANUAL_OVERRIDE_AUTO_REVERT', 'Manual Override Disabled',
       `Feeder no longer empty (${FEEDER_STATES[next].label}). Control returned to AUTO.`, 'Feeder / VFD',
-      { aiState: next, prevHz: sim.manualHz, commandHz: autoFrequency(next, settings.all) });
+      { aiState: next, prevHz: sim.manualHz, commandHz: snapshot().vfd.commandHz });
   }
 }
 
@@ -173,6 +173,9 @@ export const mockService = {
     const s = settings.all;
     if (mode === 'MANUAL' && sim.aiState !== 'EMPTY') {
       return { ok: false, error: 'Manual control is only allowed while the AI detects EMPTY.' };
+    }
+    if (manualHz != null && mode !== 'MANUAL' && (sim.aiState !== 'EMPTY' || sim.requestedMode !== 'MANUAL')) {
+      return { ok: false, error: 'Manual Empty speed can only be changed while the feeder is EMPTY and in MANUAL.' };
     }
     if (manualHz != null) {
       const n = Number(manualHz);

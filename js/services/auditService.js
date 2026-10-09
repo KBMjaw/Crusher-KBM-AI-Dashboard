@@ -80,7 +80,8 @@ function load() {
   const real = stored
     .filter((r) => r && r.source !== 'demo-seed')
     // records from earlier builds lack the trust fields
-    .map((r) => ('ipSimulated' in r ? r : { ...r, ipSimulated: r.username !== 'system', verified: false }));
+    // Device records are never "verified" (also protects against edited storage).
+    .map((r) => ({ ...r, ipSimulated: 'ipSimulated' in r ? !!r.ipSimulated : r.username !== 'system', verified: false }));
   local.set(STORE_KEY, real);
   return real;
 }
@@ -138,7 +139,8 @@ export const audit = {
   async list() {
     if (APP.dataSource === 'api') {
       const res = await fetch(`${APP.apiBase}/api/v1/audit?limit=${MAX_RECORDS}`);
-      return res.json();
+      // Records from the backend audit service are the authoritative ones.
+      return (await res.json()).map((r) => ({ ...r, verified: true, ipSimulated: false }));
     }
     records = records || load();
     return records;

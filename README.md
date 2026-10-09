@@ -35,7 +35,8 @@ by the backend (see `docs/API.md`).
 A new deployment installs in the background. The app then shows **"New version available —
 Reload"**; it never reloads on its own. If there is unsaved work (an open dialog or a manual speed
 not yet applied) the user is asked to confirm before reloading. Pages still running v1.0/v1.1 are
-moved to the new service worker without a reload; their next normal reload shows the new version.
+moved to the new service worker without a reload; their next normal reload shows the new version. If the update is accepted in one
+window, other open windows keep running and their banner says "The app was updated in another window. Reload to continue."
 
 ## Tests
 
@@ -45,6 +46,7 @@ node tests/e2e.cjs                 # end-to-end feature checks (Playwright)
 node tests/update.cjs              # new-version banner + upgrade clean-up
 node tests/upgrade-from-live.cjs   # upgrade from the live v1.1.1 build (git commit 9e66e12)
 node tests/release-check.cjs       # version bumped + all files precached (run before every release)
+node tests/rollback.cjs            # installed app returns to v1.1.1 after a rollback
 node tests/layout.cjs              # clipped/overflowing text at 320–1920 px
 node tests/a11y.cjs path/to/axe.min.js   # axe-core WCAG 2 A/AA, light + dark
 ```

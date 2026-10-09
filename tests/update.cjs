@@ -32,6 +32,7 @@ const server = spawn('python3', ['-m', 'http.server', String(PORT)], { cwd: TMP,
     localStorage.setItem('cm.audit', JSON.stringify([
       { id: 'seed-1', ts: new Date().toISOString(), username: 'admin', role: 'Administrator', ip: '192.168.1.105', action: 'LOGIN', details: 'example', prev: '', next: '', source: 'demo-seed' },
       { id: 'a-real', ts: new Date().toISOString(), username: 'admin', role: 'Administrator', ip: '192.168.1.112', action: 'PASSWORD_CHANGED', details: 'real', prev: '', next: '', source: 'device-demo' },
+      { id: 'a-fake', ts: new Date().toISOString(), username: 'admin', role: 'Administrator', ip: '10.0.0.1', action: 'LOGIN', details: 'edited in storage', prev: '', next: '', source: 'device-demo', ipSimulated: false, verified: true },
     ]));
   });
   await p.goto(BASE + '/', { waitUntil: 'networkidle' });
@@ -40,11 +41,14 @@ const server = spawn('python3', ['-m', 'http.server', String(PORT)], { cwd: TMP,
   const audit = await p.evaluate(() => JSON.parse(localStorage.getItem('cm.audit')));
   check('Upgrade: example audit entries removed', !audit.some((r) => r.source === 'demo-seed'));
   check('Upgrade: real records kept and marked simulated/unverified', audit.some((r) => r.id === 'a-real' && r.ipSimulated === true && r.verified === false));
+  check('Device record edited to "verified" is still treated as unverified', audit.some((r) => r.id === 'a-fake' && r.verified === false));
 
   /* Update banner */
-  await p.evaluate(async () => { await navigator.serviceWorker.ready; });
+  await p.evaluate(async () => { await navigator.serviceWorker.ready; }); await wait(p, 800);
+  check('First visit: no banner while the service worker takes control', !(await p.isVisible('.update-banner')));
   await p.reload({ waitUntil: 'networkidle' }); await wait(p, 800);
   check('Service worker controls the page', await p.evaluate(() => !!navigator.serviceWorker.controller));
+  check('First install shows no update banner', !(await p.isVisible('.update-banner')));
   await p.evaluate(() => { window.__notReloaded = true; });
   // "Deploy" a new version.
   const sw = fs.readFileSync(path.join(TMP, 'sw.js'), 'utf8').replace(/const VERSION = '([^']+)'/, "const VERSION = 'cm-test-next'");
@@ -52,6 +56,16 @@ const server = spawn('python3', ['-m', 'http.server', String(PORT)], { cwd: TMP,
   await p.evaluate(async () => (await navigator.serviceWorker.getRegistration()).update());
   await p.waitForSelector('.update-banner', { timeout: 15000 }).catch(() => {});
   check('Banner "New version available" appears', (await p.textContent('.update-banner').catch(() => '')).includes('New version available'));
+  // Second tab on the same version also gets the banner.
+  const p2 = await ctx.newPage(); p2.on('pageerror', (e) => errors.push('tab2: ' + e.message));
+  await p2.goto(BASE + '/#/dashboard', { waitUntil: 'networkidle' }); await wait(p2, 1500);
+  await p2.evaluate(() => { window.__tab2 = true; });
+  check('Second tab shows the banner too', await p2.isVisible('.update-banner'));
+  // A dialog keeps focus away from the banner.
+  await p.evaluate(() => { location.hash = '#/profile'; }); await wait(p, 600);
+  await p.click('[data-act=logout]'); await wait(p, 300);
+  check('Banner is inert while a dialog is open', await p.evaluate(() => document.querySelector('.update-banner').inert === true));
+  await p.click('.modal [data-act=cancel]'); await wait(p, 300);
   await wait(p, 1500);
   check('App is not reloaded automatically', await p.evaluate(() => window.__notReloaded === true));
   // Unsaved work: pending manual speed on Machine screen.
@@ -69,6 +83,13 @@ const server = spawn('python3', ['-m', 'http.server', String(PORT)], { cwd: TMP,
   await Promise.all([p.waitForNavigation({ timeout: 15000 }).catch(() => {}), p.click('.modal [data-act=ok]')]);
   await wait(p, 1500);
   check('Reload after confirm loads the new version', await p.evaluate(async () => window.__notReloaded === undefined && (await caches.keys()).includes('cm-test-next')));
+  await wait(p2, 800);
+  check('Other tab is not force-reloaded', await p2.evaluate(() => window.__tab2 === true));
+  check('Other tab is told the app was updated elsewhere', (await p2.textContent('.update-banner').catch(() => '')).includes('updated in another window'));
+  await Promise.all([p2.waitForNavigation({ timeout: 10000 }).catch(() => {}), p2.click('.update-banner [data-reload]')]);
+  await wait(p2, 800);
+  check('Other tab reloads when the user taps Reload', await p2.evaluate(() => window.__tab2 === undefined));
+  await p2.close();
   check('Old cache removed after update', await p.evaluate(async () => (await caches.keys()).length === 1));
   check('No banner after updating', !(await p.isVisible('.update-banner')));
   check('No JavaScript errors', errors.length === 0, errors.join(' | '));

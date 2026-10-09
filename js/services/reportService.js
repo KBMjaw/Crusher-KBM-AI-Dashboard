@@ -221,7 +221,7 @@ function download(blob, name) {
 function csvCell(v) {
   let s = String(v ?? '');
   // Neutralise spreadsheet formulas (CSV injection) in user-supplied text.
-  if (/^[=+\-@\t\r]/.test(s) && !/^-?\d/.test(s)) s = `'${s}`;
+  if (/^[=+@\t\r]/.test(s) || (s.startsWith('-') && !/^-\d+(\.\d+)?$/.test(s))) s = `'${s}`;
   return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 export function exportCSV(r) {

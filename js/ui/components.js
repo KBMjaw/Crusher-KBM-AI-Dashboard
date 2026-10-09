@@ -74,7 +74,10 @@ function setBackgroundInert() {
   const wraps = [...document.querySelectorAll('#modal-root .modal-wrap')];
   const top = wraps[wraps.length - 1];
   wraps.forEach((w) => { w.inert = w !== top; });
-  ['app', 'login-root'].forEach((id) => { const el = document.getElementById(id); if (el) el.inert = !!top; });
+  ['#app', '#login-root', '.update-banner', '.skip-link'].forEach((sel) => {
+    const el = document.querySelector(sel);
+    if (el) el.inert = !!top;
+  });
 }
 
 /**
@@ -114,7 +117,19 @@ export function modal({ title, body, footer = '', onMount, onClose, size = 'md',
       prevFocus?.focus?.();
     }, 180);
   };
-  const onKey = (e) => { if (e.key === 'Escape' && dismissible && root.lastElementChild === wrap) close(); };
+  const onKey = (e) => {
+    if (root.lastElementChild !== wrap) return; // only the top-most dialog reacts
+    if (e.key === 'Escape' && dismissible) { close(); return; }
+    if (e.key === 'Tab') {
+      // Keep keyboard focus cycling inside the dialog.
+      const items = [...wrap.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')]
+        .filter((el) => !el.disabled && !el.hidden && el.offsetParent !== null);
+      if (!items.length) return;
+      const first = items[0]; const last = items[items.length - 1];
+      if (e.shiftKey && (document.activeElement === first || !wrap.contains(document.activeElement))) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && (document.activeElement === last || !wrap.contains(document.activeElement))) { e.preventDefault(); first.focus(); }
+    }
+  };
   document.addEventListener('keydown', onKey);
   if (dismissible) wrap.querySelectorAll('[data-close]').forEach((b) => b.addEventListener('click', close));
   requestAnimationFrame(() => {

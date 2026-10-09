@@ -26,18 +26,23 @@ function unsavedWork() {
   return items;
 }
 
-function showBanner(worker) {
-  if (banner) { banner.worker = worker; return; }
+function showBanner(worker, note = 'Reload to update the app.') {
+  if (banner) {
+    banner.worker = worker;
+    banner.querySelector('[data-note]').textContent = note;
+    return;
+  }
   banner = document.createElement('div');
   banner.className = 'update-banner';
   banner.setAttribute('role', 'status');
   banner.setAttribute('aria-live', 'polite');
   banner.innerHTML = `
     ${icon('refresh', { size: 18 })}
-    <span class="grow"><strong>New version available</strong><span>Reload to update the app.</span></span>
+    <span class="grow"><strong>New version available</strong><span data-note></span></span>
     <button type="button" class="btn btn-ghost btn-sm" data-later>Later</button>
     <button type="button" class="btn btn-primary btn-sm" data-reload>Reload</button>`;
   banner.worker = worker;
+  banner.querySelector('[data-note]').textContent = note;
   document.body.appendChild(banner);
   document.body.classList.add('has-update-banner');
   banner.querySelector('[data-later]').onclick = () => { banner.remove(); banner = null; document.body.classList.remove('has-update-banner'); };
@@ -74,8 +79,15 @@ function track(reg) {
 
 export function initUpdates(reg) {
   track(reg);
+  // On a first install the new worker takes control of an uncontrolled page;
+  // that is not an update and must not show the banner.
+  let hadController = !!navigator.serviceWorker.controller;
   navigator.serviceWorker.addEventListener('controllerchange', () => {
-    if (reloading) location.reload(); // only after the user chose Reload
+    if (!hadController) { hadController = true; return; }
+    if (reloading) { location.reload(); return; } // the user chose Reload here
+    // Another tab activated the update: this tab keeps running (no forced
+    // reload) and asks the user to reload when convenient.
+    showBanner(null, 'The app was updated in another window. Reload to continue.');
   });
   const check = () => reg.update().catch(() => {});
   setInterval(check, CHECK_EVERY_MS);

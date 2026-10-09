@@ -50,8 +50,11 @@ export const pinGuard = {
       audit.record({ action: AUDIT.PIN_VERIFIED, details: `PIN verified to modify ${context}` });
       return { ok: true };
     }
-    const fails = local.get('pinFails', 0) + 1;
-    local.set('pinFails', fails);
+    // Failures count towards lockout only within APP.pinFailWindowSec.
+    const prev = local.get('pinFails', null);
+    const recent = prev && typeof prev === 'object' && Date.now() - prev.at < APP.pinFailWindowSec * 1000;
+    const fails = (recent ? prev.n : 0) + 1;
+    local.set('pinFails', { n: fails, at: Date.now() });
     audit.record({ action: AUDIT.PIN_FAILED, details: `Incorrect PIN while modifying ${context} (attempt ${fails})` });
     if (fails >= APP.pinMaxAttempts) {
       local.set('pinFails', 0);

@@ -24,6 +24,8 @@ export function renderRoute() {
   const id = parse();
   const old = document.getElementById('view');
   if (!old) return;
+  const ae = document.activeElement;
+  const moveFocus = old.contains(ae) || (ae && ae !== document.body && !document.getElementById('modal-root').contains(ae));
   current?.destroy?.();
   // Fresh element per route so view-level listeners never accumulate.
   const el = old.cloneNode(false);
@@ -41,9 +43,7 @@ export function renderRoute() {
   }
   window.scrollTo(0, 0);
   // Move keyboard / screen-reader focus to the new page content.
-  if (document.activeElement && document.activeElement !== document.body && !document.getElementById('modal-root').contains(document.activeElement)) {
-    el.focus({ preventScroll: true });
-  }
+  if (moveFocus) el.focus({ preventScroll: true });
   document.title = `${current.head().title || 'Dashboard'} — Crusher Monitor`;
 }
 
