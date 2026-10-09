@@ -18,6 +18,13 @@ python3 -m http.server 8080      # or: npx serve .
 
 Service worker and install need `http://localhost` or HTTPS.
 
+## Tests
+
+```bash
+python3 -m http.server 8080 &
+node tests/e2e.cjs http://localhost:8080   # 91 end-to-end checks (Playwright)
+```
+
 ## Deploy
 
 Static site. On Vercel: import the repo, framework preset **Other**, no build command,
