@@ -575,7 +575,7 @@ details.demo .demo-body { padding: 14px 16px; }
 }
 
 @media (min-width: 1024px) {
-  .app { display: grid; grid-template-columns: 252px 1fr; }
+  .app { display: grid; grid-template-columns: 252px minmax(0, 1fr); }
   .sidebar {
     display: flex; flex-direction: column; position: sticky; top: 0; height: 100dvh;
     background: var(--brand); color: #fff; padding: 20px 14px;
@@ -702,7 +702,7 @@ details.demo .demo-body { padding: 14px 16px; }
 }
 /* Laptop widths (sidebar visible but limited room): 2-column dashboard */
 @media (min-width: 1024px) and (max-width: 1279px) {
-  .app { grid-template-columns: 224px 1fr; }
+  .app { grid-template-columns: 224px minmax(0, 1fr); }
   .view { padding-left: 24px; padding-right: 24px; }
   .page-head { padding-left: 24px; padding-right: 24px; }
   .dash-grid { grid-template-columns: 1fr 1fr; }
@@ -715,3 +715,4 @@ details.demo .demo-body { padding: 14px 16px; }
   .topbar-title h1 { font-size: 16px; }
 }
 .audit-table td:nth-child(5) { min-width: 150px; }
+.main { min-width: 0; }
