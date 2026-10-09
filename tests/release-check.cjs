@@ -2,12 +2,12 @@
  * Release guard (no browser needed):  node tests/release-check.cjs [liveTag]
  *  - sw.js VERSION matches APP.version in js/config.js
  *  - every app file (js, css, icons, assets) is precached in sw.js SHELL
- *  - VERSION differs from the live build (git tag, default live-v1.1.1),
+ *  - VERSION differs from the live build (git commit, default 9e66e12 = live v1.1.1),
  *    otherwise installed apps would never receive the update
  */
 const fs = require('fs'); const path = require('path'); const { execSync } = require('child_process');
 const ROOT = path.resolve(__dirname, '..');
-const LIVE = process.argv[2] || 'live-v1.1.1';
+const LIVE = process.argv[2] || '9e66e12'; // live production build (v1.1.1)
 const sw = fs.readFileSync(path.join(ROOT, 'sw.js'), 'utf8');
 const cfg = fs.readFileSync(path.join(ROOT, 'js/config.js'), 'utf8');
 const results = [];

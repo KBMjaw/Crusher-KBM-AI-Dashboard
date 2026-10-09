@@ -16,8 +16,8 @@
 
 Vercel dashboard → `kbm-crusher-monitor` → **Deployments** → `dpl_G91abh1sfaH9LHbJdM1GnQutWzZp`
 → **⋯ → Instant Rollback** (or **Promote to Production**). The production domain switches back
-within seconds; nothing is rebuilt. The source of that build is also kept in git as tag
-`live-v1.1.1` (commit `9e66e12`).
+within seconds; nothing is rebuilt. The source of that build is commit `9e66e12` in the PR #1
+branch history (`git checkout 9e66e12`).
 
 After a rollback, installed apps fetch the older service worker on their next visit. Users may
 need to reload twice to see the older version.
